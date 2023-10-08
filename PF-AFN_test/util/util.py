@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import torch
+import torch.nn as nn
 from PIL import Image
 import numpy as np
 import os
@@ -92,3 +93,24 @@ class Colorize(object):
             color_image[2][mask] = self.cmap[label][2]
 
         return color_image
+
+########################## COUNT THE NUMBER OF PARAMETERS ##########################
+
+def get_layers(model):
+    # reference: https://saturncloud.io/blog/pytorch-get-all-layers-of-model-a-comprehensive-guide/
+    layers = []
+    for name, module in model.named_children():
+        if isinstance(module, nn.Sequential):
+            layers += get_layers(module)
+        elif isinstance(module, nn.ModuleList):
+            for m in module:
+                layers += get_layers(m)
+        else:
+            layers.append(module)
+    return layers
+
+def params_count(model):
+    num_params = sum(params.numel() for params in model.parameters())
+    print(f"The total number of parameters in {model.__class__.__name__}: {num_params:,}")
+
+########################################################################################

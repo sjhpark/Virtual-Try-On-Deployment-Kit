@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import cv2
 import torch.nn.functional as F
+from util.util import params_count
 
 opt = TestOptions().parse()
 
@@ -19,17 +20,29 @@ dataset = data_loader.load_data()
 dataset_size = len(data_loader)
 print(dataset_size)
 
+# Parser Free Warping Model
+# args: (opt, input_nc) 
+# where input_nc = input number of channels
 warp_model = AFWM(opt, 3)
 print(warp_model)
 warp_model.eval()
 warp_model.cuda()
 load_checkpoint(warp_model, opt.warp_checkpoint)
 
+# Parser Free Geneator Model
+# args: (input_nc, output_nc, num_downs, ngf, norm_layer)
+# where input_nc = input number of channels, output_nc = output number of channels, num_downs = number of downsampling layers
 gen_model = ResUnetGenerator(7, 4, 5, ngf=64, norm_layer=nn.BatchNorm2d)
 print(gen_model)
 gen_model.eval()
 gen_model.cuda()
 load_checkpoint(gen_model, opt.gen_checkpoint)
+
+# Count number of parameters
+print('\n-----------------Parameters Count:------------------')
+params_count(warp_model)
+params_count(gen_model)
+print('-----------------------------------------------------\n')
 
 total_steps = (start_epoch-1) * dataset_size + epoch_iter
 step = 0
