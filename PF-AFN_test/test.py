@@ -10,7 +10,8 @@ import torch
 import cv2
 import torch.nn.functional as F
 from tqdm import tqdm
-from util.util import params_count
+from util.util import params_count, compute_SSIM
+from natsort import natsorted
 
 opt = TestOptions().parse()
 
@@ -109,3 +110,15 @@ for epoch in range(1,2):
             break
 
 print(f"Mean inference latency: {sum(inference_latency) / len(inference_latency) * 1000:.3f}ms")
+
+############## Compute SSIM ##############
+# all images
+all_images = os.listdir("results/demo/PFAFN/")
+# ground truth images (0_gt.jpg, 1_gt.jpg, 2_gt.jpg, ...)
+gt_images = [os.path.join("results/demo/PFAFN/", x) for x in all_images if x.endswith("_gt.jpg")]
+gt_images = natsorted(gt_images)
+# generated images (0.jpg, 1.jpg, 2.jpg, ...)
+gen_images = [os.path.join("results/demo/PFAFN/", x) for x in all_images if not x.endswith("_gt.jpg")]
+gen_images = natsorted(gen_images)
+# compute SSIM
+compute_SSIM(gt_images, gen_images)

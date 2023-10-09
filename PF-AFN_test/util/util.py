@@ -5,6 +5,10 @@ import torch.nn as nn
 from PIL import Image
 import numpy as np
 import os
+import cv2
+import torch
+from torch.autograd import Variable
+import numpy as np
 
 def tensor2im(image_tensor, imtype=np.uint8, normalize=True):
     if isinstance(image_tensor, list):
@@ -113,4 +117,28 @@ def params_count(model):
     num_params = sum(params.numel() for params in model.parameters())
     print(f"The total number of parameters in {model.__class__.__name__}: {num_params:,}")
 
-########################################################################################
+########################### SSIM (Structural Similarity) ###########################
+def compute_SSIM(gt_images, gen_images):
+    # Reference: https://github.com/OFA-Sys/DAFlow/blob/main/utils/test_ssim.py#L11
+
+    SSIMS =[]
+    PSNRS = []
+    import util.pytorch_ssim as pytorch_ssim
+    ssim_loss = pytorch_ssim.SSIM(window_size = 11)
+
+    for i, (gt_image, gen_image) in enumerate(zip(gt_images, gen_images)):
+        img1 = cv2.imread(gt_image)
+        img2 = cv2.imread(gen_image)
+        img1 = torch.from_numpy(np.rollaxis(img1, 2)).float().unsqueeze(0)/255.0
+        img2 = torch.from_numpy(np.rollaxis(img2, 2)).float().unsqueeze(0)/255.0 
+        img1 = img1.cuda()
+        img2 = img2.cuda()
+    
+        img1 = Variable(img1, requires_grad=False)
+        img2 = Variable(img2, requires_grad = False)
+
+        SSIM = ssim_loss(img1, img2).data.item()
+        print(f"image {i}: SSIM {SSIM}")
+        SSIMS.append(SSIM)
+
+    print(f"Average SSIM: {np.mean(SSIMS)}")
