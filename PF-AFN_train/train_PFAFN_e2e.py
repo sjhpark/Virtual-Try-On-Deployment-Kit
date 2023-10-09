@@ -12,6 +12,7 @@ from torch.utils.data.distributed import DistributedSampler
 from tensorboardX import SummaryWriter
 import datetime
 import cv2
+from tqdm import tqdm
 
 if __name__ == "__main__":
     opt = TrainOptions().parse()
@@ -71,6 +72,7 @@ if __name__ == "__main__":
     # args: (input_nc, output_nc, num_downs, ngf, norm_layer)
     # where input_nc = input number of channels, output_nc = output number of channels, num_downs = number of downsampling layers
     PF_gen_model = ResUnetGenerator(7, 4, 5, ngf=64, norm_layer=nn.BatchNorm2d)
+    # PF_gen_model = ResUnetGenerator(7, 4, 5, ngf=8, norm_layer=nn.BatchNorm2d)
     print(PF_gen_model)
     PF_gen_model.train()
     PF_gen_model.cuda()
@@ -126,14 +128,13 @@ if __name__ == "__main__":
         epoch_start_time = time.time()
         if epoch != start_epoch:
             epoch_iter = epoch_iter % dataset_size
-
         # ========================================
         # 1. do not use train_sampler if only 1 gpu
         # ========================================
         if len(opt.gpu_ids) > 1:
             train_sampler.set_epoch(epoch)
 
-        for i, data in enumerate(train_loader):
+        for i, data in tqdm(enumerate(train_loader), total=len(train_loader), desc="iter: "):
 
             iter_start_time = time.time()
 
@@ -250,7 +251,10 @@ if __name__ == "__main__":
             skin_mask = warped_prod_edge_un.detach() * (1 - person_clothes_edge.cuda())
             gen_inputs = torch.cat([p_tryon_un.detach(), warped_cloth, warped_prod_edge], 1)
             gen_outputs = PF_gen_model(gen_inputs)
-            p_rendered, m_composite = torch.split(gen_outputs, [3, 1], 1)
+
+            # p_rendered, m_composite = torch.split(gen_outputs, [3, 1], 1)
+            p_rendered, m_composite = torch.split(gen_outputs, [gen_outputs.shape[1] - 1, 1], 1)
+
             p_rendered = torch.tanh(p_rendered)
             m_composite = torch.sigmoid(m_composite)
             m_composite1 = m_composite * warped_prod_edge
@@ -328,9 +332,13 @@ if __name__ == "__main__":
         if epoch % opt.save_epoch_freq == 0:
             if opt.local_rank == 0:
                 print('saving the model at the end of epoch %d, iters %d' % (epoch, total_steps))
-                save_checkpoint(PF_warp_model.module,
+                # save_checkpoint(PF_warp_model.module,
+                #                 os.path.join(opt.checkpoints_dir, opt.name, 'PFAFN_warp_epoch_%03d.pth' % (epoch + 1)))
+                # save_checkpoint(PF_gen_model.module,
+                #                 os.path.join(opt.checkpoints_dir, opt.name, 'PFAFN_gen_epoch_%03d.pth' % (epoch + 1)))
+                save_checkpoint(PF_warp_model,
                                 os.path.join(opt.checkpoints_dir, opt.name, 'PFAFN_warp_epoch_%03d.pth' % (epoch + 1)))
-                save_checkpoint(PF_gen_model.module,
+                save_checkpoint(PF_gen_model,
                                 os.path.join(opt.checkpoints_dir, opt.name, 'PFAFN_gen_epoch_%03d.pth' % (epoch + 1)))
 
         if epoch > opt.niter:
