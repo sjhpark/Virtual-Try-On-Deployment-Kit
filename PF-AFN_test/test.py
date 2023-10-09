@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import cv2
 import torch.nn.functional as F
+from tqdm import tqdm
 from util.util import params_count
 
 opt = TestOptions().parse()
@@ -48,17 +49,24 @@ total_steps = (start_epoch-1) * dataset_size + epoch_iter
 step = 0
 step_per_batch = dataset_size / opt.batchSize
 
+inference_latency = []
 for epoch in range(1,2):
-
     for i, data in enumerate(dataset, start=epoch_iter):
-        iter_start_time = time.time()
-        total_steps += opt.batchSize
-        epoch_iter += opt.batchSize
 
+        epoch_iter += opt.batchSize
         real_image = data['image']
         clothes = data['clothes']
-        ##edge is extracted from the clothes image with the built-in function in python
-        edge = data['edge']
+
+        # GPU WARM_UP
+        if step == 0:
+            print("Warm-up begins...")
+            for _ in tqdm(range(10), desc="Warming up..."):
+                _ = warp_model(real_image.cuda(), clothes.cuda())
+            print("Warm-up complete!")
+
+        begin = time.time()
+
+        edge = data['edge'] # edge is extracted from the clothes image with the built-in function in python
         edge = torch.FloatTensor((edge.detach().numpy() > 0.5).astype(np.int))
         clothes = clothes * edge        
 
@@ -89,9 +97,15 @@ for epoch in range(1,2):
             rgb=(cv_img*255).astype(np.uint8)
             bgr=cv2.cvtColor(rgb,cv2.COLOR_RGB2BGR)
             cv2.imwrite(sub_path+'/'+str(step)+'.jpg',bgr)
+        
+            end = time.time()
+
+            # print inference latency
+            inference_latency.append(end - begin)
+            print(f"Test Image {step}, Inference latency: {inference_latency[step] * 1000:.3f}ms")
 
         step += 1
         if epoch_iter >= dataset_size:
             break
 
-
+print(f"Mean inference latency: {sum(inference_latency) / len(inference_latency) * 1000:.3f}ms")
