@@ -122,7 +122,6 @@ def compute_SSIM(gt_images, gen_images):
     # Reference: https://github.com/OFA-Sys/DAFlow/blob/main/utils/test_ssim.py#L11
 
     SSIMS =[]
-    PSNRS = []
     import util.pytorch_ssim as pytorch_ssim
     ssim_loss = pytorch_ssim.SSIM(window_size = 11)
 
