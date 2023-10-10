@@ -122,13 +122,17 @@ def compute_SSIM(gt_images, gen_images):
     # Reference: https://github.com/OFA-Sys/DAFlow/blob/main/utils/test_ssim.py#L11
 
     SSIMS =[]
-    PSNRS = []
     import util.pytorch_ssim as pytorch_ssim
     ssim_loss = pytorch_ssim.SSIM(window_size = 11)
 
     for i, (gt_image, gen_image) in enumerate(zip(gt_images, gen_images)):
         img1 = cv2.imread(gt_image)
         img2 = cv2.imread(gen_image)
+
+        # Split the image into 3 equal parts and get the 3rd part
+        img1 = img1[:, img1.shape[1]//3*2:, :]
+        img2 = img2[:, img2.shape[1]//3*2:, :]
+
         img1 = torch.from_numpy(np.rollaxis(img1, 2)).float().unsqueeze(0)/255.0
         img2 = torch.from_numpy(np.rollaxis(img2, 2)).float().unsqueeze(0)/255.0 
         img1 = img1.cuda()
