@@ -123,6 +123,12 @@ class Vgg19(nn.Module):
     def __init__(self, requires_grad=False):
         super(Vgg19, self).__init__()
         vgg_pretrained_features = models.vgg19(pretrained=True).features
+
+        # for torchvision >= 0.4.0 or torch >= 1.2.0
+        for x in vgg_pretrained_features.modules():
+            if isinstance(x, nn.MaxPool2d) or isinstance(x, nn.AdaptiveAvgPool2d):
+                x.ceil_mode = True
+
         self.slice1 = nn.Sequential()
         self.slice2 = nn.Sequential()
         self.slice3 = nn.Sequential()
@@ -198,5 +204,3 @@ def load_checkpoint_part_parallel(model, checkpoint_path):
         if 'cond_' not in param and 'aflow_net.netRefine' not in param:
             checkpoint_new[param] = checkpoint[param]
     model.load_state_dict(checkpoint_new)
-
-

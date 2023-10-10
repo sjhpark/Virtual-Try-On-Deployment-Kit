@@ -12,6 +12,7 @@ from torch.utils.data.distributed import DistributedSampler
 from tensorboardX import SummaryWriter
 import datetime
 import cv2
+from tqdm import tqdm
 
 opt = TrainOptions().parse()
 path = 'runs/' + opt.name
@@ -51,7 +52,8 @@ PF_warp_model.train()
 PF_warp_model.cuda()
 load_checkpoint_parallel(PF_warp_model, opt.PFAFN_warp_checkpoint)
 
-PF_gen_model = ResUnetGenerator(7, 4, 5, ngf=64, norm_layer=nn.BatchNorm2d)
+# PF_gen_model = ResUnetGenerator(7, 4, 5, ngf=64, norm_layer=nn.BatchNorm2d)
+PF_gen_model = ResUnetGenerator(7, 4, 5, ngf=8, norm_layer=nn.BatchNorm2d)
 print(PF_gen_model)
 PF_gen_model.train()
 PF_gen_model.cuda()
@@ -101,7 +103,7 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
 
     train_sampler.set_epoch(epoch)
 
-    for i, data in enumerate(train_loader):
+    for i, data in tqdm(enumerate(train_loader), total=len(train_loader), desc="iter: "):
 
         iter_start_time = time.time()
 
