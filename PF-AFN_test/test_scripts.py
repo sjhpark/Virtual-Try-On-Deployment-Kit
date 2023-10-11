@@ -24,18 +24,24 @@ mode = 'avgpool'
 
 if mode == 'resize':
 	##### hyperparameters #####
-	H,W = 64, 64 # New input image size
+	H, W = 64,64 # New input image size
 	###########################
 
 if mode == 'avgpool':
 	##### hyperparameters #####
-	k = 4 # kernel size
-	s = 2 # stride
+	H_resized, W_resized = 128, 128
 	###########################
+	k = 2 # kernel size
+	s = 2 # stride
 	
 	# Ground truth image sample
 	image_gt_sample = os.listdir('dataset/VITON_test/ground_truth/')[0]
+	# image_gt_sample = Image.open('dataset/VITON_test/ground_truth/' + image_gt_sample)
+	# image_gt_sample = transforms.ToTensor()(image_gt_sample) # PIL image to tensor
+
+	# resize
 	image_gt_sample = Image.open('dataset/VITON_test/ground_truth/' + image_gt_sample)
+	image_gt_sample = transforms.Resize((H_resized,W_resized))(image_gt_sample)
 	image_gt_sample = transforms.ToTensor()(image_gt_sample) # PIL image to tensor
 
 	# Average pooling
@@ -123,13 +129,13 @@ class dressUpInference():
 				I = Image.open(I_path).convert('RGB').resize((W,H))
 
 			if mode == "avgpool":
-				I = Image.open(I_path).convert('RGB')
+				I = Image.open(I_path).convert('RGB').resize((W_resized,H_resized))
 				I = transforms.ToTensor()(I)
 				I = avgpool(I)
 				I = transforms.ToPILImage()(I)
 
 			if i==0:
-				print("New Image Size", I.size)
+				print("New Input Image Size", I.size)
 			input_frame = I
 			params = get_params(self.opt, I.size)
 			transform = get_transform(self.opt, params)
