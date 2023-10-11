@@ -20,19 +20,24 @@ from flopth import flopth
 
 ssim_loss = pytorch_ssim.SSIM(window_size = 11)
 
-mode = 'avgpool'
+mode = 'resize'
 
 if mode == 'resize':
 	##### hyperparameters #####
-	H, W = 64,64 # New input image size
+	H, W = 32,32 # New input image size
 	###########################
 
 if mode == 'avgpool':
 	##### hyperparameters #####
-	H_resized, W_resized = 128, 128
+	'''
+	H or W = 64, 128, 256, 512, or ...
+	(k,s) = (2,2), (4,2), or (4,4)
+	'''
+	H_resized, W_resized = 256, 256
+	k = 4 # kernel size
+	s = 4 # stride
 	###########################
-	k = 2 # kernel size
-	s = 2 # stride
+
 	
 	# Ground truth image sample
 	image_gt_sample = os.listdir('dataset/VITON_test/ground_truth/')[0]
