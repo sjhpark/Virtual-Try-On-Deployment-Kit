@@ -19,12 +19,15 @@ from fvcore.nn import FlopCountAnalysis
 from flopth import flopth
 import time
 from tqdm import tqdm
+from natsort import natsorted
+from torch.utils.data import Dataset, DataLoader
 
 ssim_loss = pytorch_ssim.SSIM(window_size = 11)
 
 #### hyperparamters A ####
 mode = 'resize'
-QTA = "AMP" # 'AMP' for Automatic Mixed Precision; None for no QTA
+QTA = 'AMP' # 'AMP' for Automatic Mixed Precision; None for no QTA
+batch_size = 1 # input batch size
 ########################
 
 if mode == 'resize':
@@ -56,6 +59,87 @@ if mode == 'avgpool':
 	avgpool = nn.AvgPool2d(kernel_size=k, stride=s)
 	image_gt_sample_pooled = avgpool(image_gt_sample)
 	H, W = image_gt_sample_pooled.size()[-2:] # New input image size
+
+# pytorch custom dataset
+class CustomDataset(Dataset):
+	def __init__(self, mode, stat_flag=False):
+		self.opt = TestOptions().parse()
+		self.mode = mode
+		self.stat_flag = stat_flag
+		self.dataset_path = 'dataset/VITON_test/'
+		if stat_flag == False: # for evaluating the model
+			self.C_list = natsorted(os.listdir(os.path.join(self.dataset_path, 'test_clothes')))
+			self.E_list = natsorted(os.listdir(os.path.join(self.dataset_path, 'test_edge')))
+			self.I_list = natsorted(os.listdir(os.path.join(self.dataset_path, 'test_img')))
+		else: # for evaluating statictics of the model
+			self.C_list = ['000020_1.jpg', '000028_1.jpg', '000038_1.jpg', '000048_1.jpg', '000057_1.jpg']
+			self.E_list = ['000020_1.jpg', '000028_1.jpg', '000038_1.jpg', '000048_1.jpg', '000057_1.jpg']
+			self.I_list  = ['000164_0.jpg', '019454_0.jpg', '019183_0.jpg', '019045_0.jpg', '018746_0.jpg']
+	
+	def __len__(self):
+		return len(self.I_list)
+
+	def __getitem__(self, idx):
+		if self.stat_flag:
+			groundtruth = os.path.join(self.dataset_path, 'ground_truth', self.I_list[idx])
+
+		I_sample = os.path.join(self.dataset_path, 'test_img', self.I_list[idx])
+		C_sample = os.path.join(self.dataset_path, 'test_clothes', self.C_list[idx])
+		E_sample = os.path.join(self.dataset_path, 'test_edge', self.E_list[idx])
+
+		if self.mode == "resize":
+			I = Image.open(I_sample).convert('RGB').resize((W,H))
+
+		if self.mode == "avgpool":
+			I = Image.open(I_sample).convert('RGB').resize((W_resized,H_resized))
+			I = transforms.ToTensor()(I)
+			I = avgpool(I)
+			I = transforms.ToPILImage()(I)
+
+		input_frame = I
+		params = get_params(self.opt, I.size)
+		transform = get_transform(self.opt, params)
+		transform_E = get_transform(self.opt, params, method=Image.NEAREST, normalize=False)
+
+		I = input_frame.convert('RGB')
+		params = get_params(self.opt, I.size)
+		transform = get_transform(self.opt, params)
+		transform_E = get_transform(self.opt, params, method=Image.NEAREST, normalize=False)
+
+		I_tensor = transform(I)
+
+		C = Image.open(C_sample).convert('RGB').resize((W,H))
+		C_tensor = transform(C)
+
+		E = Image.open(E_sample).convert('L').resize((W,H))
+		E_tensor = transform_E(E)
+
+		data = {'image': I_tensor,'clothes': C_tensor, 'edge': E_tensor}
+
+		real_image = data['image']
+		clothes = data['clothes']
+		edge = data['edge']
+		edge_tmp = edge.clone()
+	
+		edge = torch.FloatTensor((edge_tmp.detach().numpy() > 0.5).astype(np.int))
+		
+		clothes = clothes * edge    
+		real_image = real_image.reshape(1,real_image.shape[0], real_image.shape[1], real_image.shape[2])
+		clothes = clothes.reshape(1, clothes.shape[0], clothes.shape[1], clothes.shape[2] )
+		edge = edge.reshape(1, edge.shape[0], edge.shape[1], edge.shape[2] )
+		real_image = real_image.cuda()
+		clothes = clothes.cuda()
+		edge =edge.cuda()
+
+		# drop the first dummy dimension
+		real_image = real_image.squeeze(0)
+		clothes = clothes.squeeze(0)
+		edge = edge.squeeze(0)
+
+		if self.stat_flag:
+			return real_image, clothes, edge, groundtruth
+		else:
+			return real_image, clothes, edge
 
 class dressUpInference():
 	def __init__(self):
@@ -131,13 +215,18 @@ class dressUpInference():
 		clothes = data['clothes']
 		edge = data['edge']
 		edge_tmp = edge.clone()
-	
-		edge = torch.FloatTensor((edge_tmp.detach().numpy() > 0.5).astype(np.int))
+
+		if edge_tmp.device != torch.device('cpu'):
+			edge = torch.FloatTensor((edge_tmp.detach().cpu().numpy() > 0.5).astype(np.int))
+		else:
+			edge = torch.FloatTensor((edge_tmp.detach().numpy() > 0.5).astype(np.int))
+		# convert back to cuda
+		edge = edge.cuda()
 		
-		clothes = clothes * edge    
-		real_image = real_image.reshape(1,real_image.shape[0], real_image.shape[1], real_image.shape[2])
-		clothes = clothes.reshape(1, clothes.shape[0], clothes.shape[1], clothes.shape[2] )
-		edge = edge.reshape(1, edge.shape[0], edge.shape[1], edge.shape[2] )
+		clothes = clothes * edge
+		real_image = real_image.reshape(real_image.shape[0], real_image.shape[1], real_image.shape[2], real_image.shape[3])
+		clothes = clothes.reshape(clothes.shape[0], clothes.shape[1], clothes.shape[2], clothes.shape[3] )
+		edge = edge.reshape(edge.shape[0], edge.shape[1], edge.shape[2], edge.shape[3] )
 		real_image = real_image.cuda()
 		clothes = clothes.cuda()
 		edge =edge.cuda()
@@ -173,77 +262,35 @@ class dressUpInference():
 		rgb=(cv_img*255).astype(np.uint8)
 		return rgb
 	
-	def get_statistics(self):
-		dataset_path = 'dataset/VITON_test/'
-		clothes = ['000020_1.jpg', '000028_1.jpg', '000038_1.jpg', '000048_1.jpg', '000057_1.jpg']
-		edges = ['000020_1.jpg', '000028_1.jpg', '000038_1.jpg', '000048_1.jpg', '000057_1.jpg']
-		model = ['000164_0.jpg', '019454_0.jpg', '019183_0.jpg', '019045_0.jpg', '018746_0.jpg']
+	def get_statistics(self, img_num):
 		MSE = []
 		SSIM = []
-		for i in range(1):
-			#### for AMP, will change i manually since after 1st iteration gives an illegal memory access error ####
-			# i = 0
-			#####################################################################################################
-			I_path = os.path.join(dataset_path+'test_img/', model[i])
-			C_path = os.path.join(dataset_path+'test_clothes/', clothes[i])
-			E_path = os.path.join(dataset_path+'test_edge/', edges[i])
-			groundtruth_path = os.path.join(dataset_path+'ground_truth/', model[i])
 
-			if mode == "resize":
-				I = Image.open(I_path).convert('RGB').resize((W,H))
+		dataset_path = 'dataset/VITON_test/'
+		dataset = CustomDataset(mode, stat_flag=True)
+		dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
+		for i, batch in enumerate(dataloader):
+			I_tensor, C_tensor, E_tensor, groundtruth = batch
+			groundtruth = groundtruth[0]
 
-			if mode == "avgpool":
-				I = Image.open(I_path).convert('RGB').resize((W_resized,H_resized))
-				I = transforms.ToTensor()(I)
-				I = avgpool(I)
-				I = transforms.ToPILImage()(I)
+			if i == img_num-1:
+				data = { 'image': I_tensor,'clothes': C_tensor, 'edge': E_tensor}
+				img1 = self.infer(data)
+				img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
+				img2 = cv2.imread(groundtruth)
+				groundtruth = groundtruth.split('/')[-1]
 
-			if i==0:
-				print("New Input PIL Image Size (W,H): ", I.size)
-			input_frame = I
-			params = get_params(self.opt, I.size)
-			transform = get_transform(self.opt, params)
-			transform_E = get_transform(self.opt, params, method=Image.NEAREST, normalize=False)
+				if not os.path.exists(dataset_path+'results/'):
+					os.makedirs(dataset_path+'results/')
+				cv2.imwrite(f"{os.path.join(dataset_path+'results/', mode+'_'+groundtruth)}", img1)
 
-			I_tensor = transform(I)
+				mse_score = mean_squared_error(img1, img2)
+				ssim_score = ssim(img1, img2, data_range=img1.max() - img1.min(), multichannel=True)
+				MSE.append(mse_score)
+				SSIM.append(ssim_score)
+				print(f"Image {i} | MSE: {mse_score}, SSIM: {ssim_score}")
 
-			C = Image.open(C_path).convert('RGB').resize((W,H))
-			C_tensor = transform(C)
-
-			E = Image.open(E_path).convert('L').resize((W,H))
-			E_tensor = transform_E(E)
-
-			self.data = { 'image': I_tensor,'clothes': C_tensor, 'edge': E_tensor}
-			I = input_frame.convert('RGB')
-			params = get_params(self.opt, I.size)
-			transform = get_transform(self.opt, params)
-			transform_E = get_transform(self.opt, params, method=Image.NEAREST, normalize=False)
-
-			I_tensor = transform(I)
-
-			C = Image.open(C_path).convert('RGB')
-			C_tensor = transform(C)
-
-			E = Image.open(E_path).convert('L')
-			E_tensor = transform_E(E)
-
-			data = { 'image': I_tensor,'clothes': C_tensor, 'edge': E_tensor}
-			img1 = self.infer(data)
-			img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
-			img2 = cv2.imread(groundtruth_path)
-
-			if not os.path.exists(dataset_path+'results/'):
-				os.makedirs(dataset_path+'results/')
-			cv2.imwrite( f"{os.path.join(dataset_path+'results/', mode+'_'+model[i])}", img1)
-
-			mse_score = mean_squared_error(img1, img2)
-			ssim_score = ssim(img1, img2, data_range=img1.max() - img1.min(), multichannel=True)
-			MSE.append(mse_score)
-			SSIM.append(ssim_score)
-			print(f"Image {i} | MSE: {mse_score}, SSIM: {ssim_score}")
-
-		print("Output Image Size", img1.shape)
-		print(f"Average MSE: {np.mean(MSE)}\nAverage SSIM: {np.mean(SSIM)}")
+				return
 
 	def measure_inference_time(self, warmup_itr=10):
 		self.opt = TestOptions().parse()
@@ -258,119 +305,59 @@ class dressUpInference():
 		load_checkpoint(self.gen_model, opt.gen_checkpoint)
 		load_checkpoint(self.warp_model, opt.warp_checkpoint)
 
-		dataset_path = 'dataset/VITON_test/'
-		clothes = ['000020_1.jpg', '000028_1.jpg', '000038_1.jpg', '000048_1.jpg', '000057_1.jpg']
-		edges = ['000020_1.jpg', '000028_1.jpg', '000038_1.jpg', '000048_1.jpg', '000057_1.jpg']
-		model = ['000164_0.jpg', '019454_0.jpg', '019183_0.jpg', '019045_0.jpg', '018746_0.jpg']
-		MSE = []
-		SSIM = []
-		for i in range(1):
-			I_path = os.path.join(dataset_path+'test_img/', model[i])
-			C_path = os.path.join(dataset_path+'test_clothes/', clothes[i])
-			E_path = os.path.join(dataset_path+'test_edge/', edges[i])
-			groundtruth_path = os.path.join(dataset_path+'ground_truth/', model[i])
-
-			if mode == "resize":
-				I = Image.open(I_path).convert('RGB').resize((W,H))
-
-			if mode == "avgpool":
-				I = Image.open(I_path).convert('RGB').resize((W_resized,H_resized))
-				I = transforms.ToTensor()(I)
-				I = avgpool(I)
-				I = transforms.ToPILImage()(I)
-
-			if i==0:
-				print("New Input PIL Image Size (W,H): ", I.size)
-			input_frame = I
-			params = get_params(self.opt, I.size)
-			transform = get_transform(self.opt, params)
-			transform_E = get_transform(self.opt, params, method=Image.NEAREST, normalize=False)
-
-			I_tensor = transform(I)
-
-			C = Image.open(C_path).convert('RGB').resize((W,H))
-			C_tensor = transform(C)
-
-			E = Image.open(E_path).convert('L').resize((W,H))
-			E_tensor = transform_E(E)
-
-			self.data = { 'image': I_tensor,'clothes': C_tensor, 'edge': E_tensor}
-			I = input_frame.convert('RGB')
-			params = get_params(self.opt, I.size)
-			transform = get_transform(self.opt, params)
-			transform_E = get_transform(self.opt, params, method=Image.NEAREST, normalize=False)
-
-			I_tensor = transform(I)
-
-			C = Image.open(C_path).convert('RGB')
-			C_tensor = transform(C)
-
-			E = Image.open(E_path).convert('L')
-			E_tensor = transform_E(E)
-
-			data = {'image': I_tensor,'clothes': C_tensor, 'edge': E_tensor}
-
-			real_image = data['image']
-			clothes = data['clothes']
-			edge = data['edge']
-			edge_tmp = edge.clone()
+		dataset = CustomDataset(mode=mode)
+		dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 		
-			edge = torch.FloatTensor((edge_tmp.detach().numpy() > 0.5).astype(np.int))
-			
-			clothes = clothes * edge    
-			real_image = real_image.reshape(1,real_image.shape[0], real_image.shape[1], real_image.shape[2])
-			clothes = clothes.reshape(1, clothes.shape[0], clothes.shape[1], clothes.shape[2] )
-			edge = edge.reshape(1, edge.shape[0], edge.shape[1], edge.shape[2] )
-			real_image = real_image.cuda()
-			clothes = clothes.cuda()
-			edge =edge.cuda()
+		# Warmup
+		# first img, clothe, edge from first batch
+		img, clothes, edge = next(iter(dataloader))
+		fake1, fake2, fake3 = torch.zeros_like(img), torch.zeros_like(clothes), torch.zeros_like(edge)
+		for i in tqdm(range(warmup_itr), desc="Warming up"):
+			_ = self.warp_model(fake1, fake2)
 
-			# Warmup
-			for i in tqdm(range(warmup_itr), desc="Warming up"):
-				_ = self.warp_model(real_image, clothes)
-
-			# Inference of Warpping Model
-			if QTA == 'AMP':
-				# with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=True):
-				with torch.cuda.amp.autocast():
-					# Compute inference time
-					start_time = time.time()
-					flow_out = self.warp_model(real_image, clothes)
-					end_time = time.time()
-					inference_time = end_time - start_time
-					print(f'{self.warp_model.__class__.__name__} Inference Time: {inference_time} seconds')
-			else:
+		# Inference of Warpping Model
+		real_image, clothes, edge = next(iter(dataloader))
+		if QTA == 'AMP':
+			# with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=True):
+			with torch.cuda.amp.autocast():
 				# Compute inference time
 				start_time = time.time()
 				flow_out = self.warp_model(real_image, clothes)
 				end_time = time.time()
 				inference_time = end_time - start_time
-				print(f'{self.warp_model.__class__.__name__} Inference Time: {inference_time} seconds')
-		
-			warped_cloth, last_flow, = flow_out
-			warped_edge = F.grid_sample(edge, last_flow.permute(0, 2, 3, 1), mode='bilinear', padding_mode='zeros')
-			gen_inputs = torch.cat([real_image, warped_cloth, warped_edge], 1)
+				print(f'{self.warp_model.__class__.__name__} per-Image Inference Time: {inference_time/batch_size} seconds')
+		else:
+			# Compute inference time
+			start_time = time.time()
+			flow_out = self.warp_model(real_image, clothes)
+			end_time = time.time()
+			inference_time = end_time - start_time
+			print(f'{self.warp_model.__class__.__name__} per-Image Inference Time: {inference_time/batch_size} seconds')
+	
+		warped_cloth, last_flow, = flow_out
+		warped_edge = F.grid_sample(edge, last_flow.permute(0, 2, 3, 1), mode='bilinear', padding_mode='zeros')
+		gen_inputs = torch.cat([real_image, warped_cloth, warped_edge], 1)
 
-			# Inference of Generative Model
-			if QTA == 'AMP':
-				# with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=True):
-				with torch.cuda.amp.autocast():
-					# Compute inference time
-					start_time = time.time()
-					gen_outputs = self.gen_model(gen_inputs)
-					end_time = time.time()
-					inference_time = end_time - start_time
-					print(f'{self.gen_model.__class__.__name__} Inference Time: {inference_time} seconds')
-			else:
+		# Inference of Generative Model
+		if QTA == 'AMP':
+			# with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=True):
+			with torch.cuda.amp.autocast():
 				# Compute inference time
 				start_time = time.time()
 				gen_outputs = self.gen_model(gen_inputs)
 				end_time = time.time()
 				inference_time = end_time - start_time
-				print(f'{self.gen_model.__class__.__name__} Inference Time: {inference_time} seconds')
+				print(f'{self.gen_model.__class__.__name__} per-Image Inference Time: {inference_time/batch_size} seconds')
+		else:
+			# Compute inference time
+			start_time = time.time()
+			gen_outputs = self.gen_model(gen_inputs)
+			end_time = time.time()
+			inference_time = end_time - start_time
+			print(f'{self.gen_model.__class__.__name__} per-Image Inference Time: {inference_time/batch_size} seconds')
 
 if __name__ == '__main__':
 	obj = dressUpInference()
-	# obj.model_statistics() # param count & FLOPs count
-	obj.get_statistics() # generate images
-	# obj.measure_inference_time(warmup_itr=10) # measure inference time
+	obj.model_statistics() # param count & FLOPs count
+	obj.measure_inference_time(warmup_itr=10) # measure inference time
+	obj.get_statistics(img_num=1) # generate one image and compute accuracy (MSE, SSIM); img_num = either 1, 2, 3, 4, 5 (total 5 groundtruth images)
