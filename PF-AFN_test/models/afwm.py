@@ -4,7 +4,6 @@ import torch.nn.functional as F
 from .correlation import correlation
 
 def apply_offset(offset):
-
     sizes = list(offset.size()[2:])
     grid_list = torch.meshgrid([torch.arange(size, device=offset.device) for size in sizes])
     grid_list = reversed(grid_list)
@@ -118,11 +117,11 @@ class AFlowNet(nn.Module):
             netMain_layer = torch.nn.Sequential(
                 torch.nn.Conv2d(in_channels=49, out_channels=128, kernel_size=3, stride=1, padding=1),
                 torch.nn.LeakyReLU(inplace=False, negative_slope=0.1),
-                torch.nn.Conv2d(in_channels=128, out_channels=64, kernel_size=3, stride=1, padding=1),
-                torch.nn.LeakyReLU(inplace=False, negative_slope=0.1),
-                torch.nn.Conv2d(in_channels=64, out_channels=32, kernel_size=3, stride=1, padding=1),
-                torch.nn.LeakyReLU(inplace=False, negative_slope=0.1),
-                torch.nn.Conv2d(in_channels=32, out_channels=2, kernel_size=3, stride=1, padding=1)
+                # torch.nn.Conv2d(in_channels=128, out_channels=64, kernel_size=3, stride=1, padding=1),
+                # torch.nn.LeakyReLU(inplace=False, negative_slope=0.1),
+                # torch.nn.Conv2d(in_channels=64, out_channels=32, kernel_size=3, stride=1, padding=1),
+                # torch.nn.LeakyReLU(inplace=False, negative_slope=0.1),
+                # torch.nn.Conv2d(in_channels=32, out_channels=2, kernel_size=3, stride=1, padding=1)
             )
 
             netRefine_layer = torch.nn.Sequential(
@@ -143,37 +142,48 @@ class AFlowNet(nn.Module):
 
     def forward(self, x, x_warps, x_conds, warp_feature=True):
         last_flow = None
-
         for i in range(len(x_warps)):
-          x_warp = x_warps[len(x_warps) - 1 - i]
-          x_cond = x_conds[len(x_warps) - 1 - i]
+            x_warp = x_warps[len(x_warps) - 1 - i]
+            x_cond = x_conds[len(x_warps) - 1 - i]
 
-          if last_flow is not None and warp_feature:
-              x_warp_after = F.grid_sample(x_warp, last_flow.detach().permute(0, 2, 3, 1),
-                   mode='bilinear', padding_mode='border')
-          else:
-              x_warp_after = x_warp
+            if last_flow is not None and warp_feature:
+                ## convert last_flow to dtype of x_warp ##
+                # if x_warp.dtype != last_flow.dtype:
+                    # last_flow = last_flow.to(torch.float16)
+                last_flow = last_flow.type(x_warp.dtype)
+                ##########################################
+                x_warp_after = F.grid_sample(x_warp, last_flow.detach().permute(0, 2, 3, 1), mode='bilinear', padding_mode='border')
+            else:
+                x_warp_after = x_warp
 
-          tenCorrelation = F.leaky_relu(input=correlation.FunctionCorrelation(tenFirst=x_warp_after, tenSecond=x_cond, intStride=1), negative_slope=0.1, inplace=False)
-          flow = self.netMain[i](tenCorrelation)
-          flow = apply_offset(flow)
+            tenCorrelation = F.leaky_relu(input=correlation.FunctionCorrelation(tenFirst=x_warp_after, tenSecond=x_cond, intStride=1), negative_slope=0.1, inplace=False)
+            flow = self.netMain[i](tenCorrelation)
+            flow = apply_offset(flow)
 
-          if last_flow is not None:
-              flow = F.grid_sample(last_flow, flow, mode='bilinear', padding_mode='border')
-          else:
-              flow = flow.permute(0, 3, 1, 2)
+            if last_flow is not None:
+                ## convert flow to dtype of last_flow ##
+                flow = flow.type(last_flow.dtype)
+                ##########################################
+                flow = F.grid_sample(last_flow, flow, mode='bilinear', padding_mode='border')
+            else:
+                flow = flow.permute(0, 3, 1, 2)
 
-          last_flow = flow
-          x_warp = F.grid_sample(x_warp, flow.permute(0, 2, 3, 1),mode='bilinear', padding_mode='border')
-          concat = torch.cat([x_warp,x_cond],1)
-          flow = self.netRefine[i](concat)
-          flow = apply_offset(flow)
-          flow = F.grid_sample(last_flow, flow, mode='bilinear', padding_mode='border')
+            last_flow = flow
+            ## convert flow to dtype of x_warp ##
+            flow = flow.type(x_warp.dtype)
+            #####################################
+            x_warp = F.grid_sample(x_warp, flow.permute(0, 2, 3, 1),mode='bilinear', padding_mode='border')
+            concat = torch.cat([x_warp,x_cond],1)
+            flow = self.netRefine[i](concat)
+            flow = apply_offset(flow)
+            ## convert last_flow to dtype of flow ##
+            last_flow = last_flow.type(flow.dtype)
+            ########################################
+            flow = F.grid_sample(last_flow, flow, mode='bilinear', padding_mode='border')
 
-          last_flow = F.interpolate(flow, scale_factor=2, mode='bilinear')
+            last_flow = F.interpolate(flow, scale_factor=2, mode='bilinear')
 
-        x_warp = F.grid_sample(x, last_flow.permute(0, 2, 3, 1),
-                     mode='bilinear', padding_mode='border')
+        x_warp = F.grid_sample(x, last_flow.permute(0, 2, 3, 1), mode='bilinear', padding_mode='border')
         return x_warp, last_flow,
 
 
@@ -182,6 +192,7 @@ class AFWM(nn.Module):
     def __init__(self, opt, input_nc):
         super(AFWM, self).__init__()
         num_filters = [64,128,256,256,256]
+        # num_filters = [128,128,128,128,128]
         self.image_features = FeatureEncoder(3, num_filters) 
         self.cond_features = FeatureEncoder(input_nc, num_filters)
         self.image_FPN = RefinePyramid(num_filters)
