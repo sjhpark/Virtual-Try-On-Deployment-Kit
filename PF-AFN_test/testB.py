@@ -163,7 +163,6 @@ class dressUpInference():
 			gen_outputs = self.gen_model(gen_inputs)
 
 		p_rendered, m_composite = torch.split(gen_outputs, [3, 1], 1)
-		p_rendered = torch.relu(p_rendered)
 		p_rendered = torch.tanh(p_rendered)
 		m_composite = torch.sigmoid(m_composite)
 		m_composite = m_composite * warped_edge
@@ -171,8 +170,7 @@ class dressUpInference():
 		p_tryon = p_tryon.squeeze()
 		cv_img = (p_tryon.permute(1,2,0).detach().cpu().numpy()+1)/2
 		# cv_img = cv2.rotate(cv_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
-		# rgb=(cv_img*255).astype(np.uint8)
-		rgb = cv_img*255
+		rgb=(cv_img*255).astype(np.uint8)
 		return rgb
 	
 	def get_statistics(self):
@@ -267,9 +265,6 @@ class dressUpInference():
 		MSE = []
 		SSIM = []
 		for i in range(1):
-			#### for AMP, will change i manually since after 1st iteration gives an illegal memory access error ####
-			# i = 0
-			#####################################################################################################
 			I_path = os.path.join(dataset_path+'test_img/', model[i])
 			C_path = os.path.join(dataset_path+'test_clothes/', clothes[i])
 			E_path = os.path.join(dataset_path+'test_edge/', edges[i])
@@ -376,6 +371,6 @@ class dressUpInference():
 
 if __name__ == '__main__':
 	obj = dressUpInference()
-	# obj.model_statistics()
-	# obj.get_statistics()
-	obj.measure_inference_time(warmup_itr=10)
+	# obj.model_statistics() # param count & FLOPs count
+	obj.get_statistics() # generate images
+	# obj.measure_inference_time(warmup_itr=10) # measure inference time

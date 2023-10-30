@@ -117,11 +117,11 @@ class AFlowNet(nn.Module):
             netMain_layer = torch.nn.Sequential(
                 torch.nn.Conv2d(in_channels=49, out_channels=128, kernel_size=3, stride=1, padding=1),
                 torch.nn.LeakyReLU(inplace=False, negative_slope=0.1),
-                # torch.nn.Conv2d(in_channels=128, out_channels=64, kernel_size=3, stride=1, padding=1),
-                # torch.nn.LeakyReLU(inplace=False, negative_slope=0.1),
-                # torch.nn.Conv2d(in_channels=64, out_channels=32, kernel_size=3, stride=1, padding=1),
-                # torch.nn.LeakyReLU(inplace=False, negative_slope=0.1),
-                # torch.nn.Conv2d(in_channels=32, out_channels=2, kernel_size=3, stride=1, padding=1)
+                torch.nn.Conv2d(in_channels=128, out_channels=64, kernel_size=3, stride=1, padding=1),
+                torch.nn.LeakyReLU(inplace=False, negative_slope=0.1),
+                torch.nn.Conv2d(in_channels=64, out_channels=32, kernel_size=3, stride=1, padding=1),
+                torch.nn.LeakyReLU(inplace=False, negative_slope=0.1),
+                torch.nn.Conv2d(in_channels=32, out_channels=2, kernel_size=3, stride=1, padding=1)
             )
 
             netRefine_layer = torch.nn.Sequential(
@@ -148,8 +148,6 @@ class AFlowNet(nn.Module):
 
             if last_flow is not None and warp_feature:
                 ## convert last_flow to dtype of x_warp ##
-                # if x_warp.dtype != last_flow.dtype:
-                    # last_flow = last_flow.to(torch.float16)
                 last_flow = last_flow.type(x_warp.dtype)
                 ##########################################
                 x_warp_after = F.grid_sample(x_warp, last_flow.detach().permute(0, 2, 3, 1), mode='bilinear', padding_mode='border')
