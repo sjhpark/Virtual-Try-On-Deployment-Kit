@@ -22,6 +22,13 @@ from tqdm import tqdm
 from natsort import natsorted
 from torch.utils.data import Dataset, DataLoader
 
+import torch.nn.utils.prune as prune
+from indiv_utils import load_yaml, size_on_disk, get_layers, \
+                        measure_inference_latency, param_count, \
+                        save_model_weights, \
+                        check_buffers, sparse_representation, Sparsity, \
+                        global_unstructured_pruning
+
 ssim_loss = pytorch_ssim.SSIM(window_size = 11)
 
 #### hyperparamters A ####
@@ -44,7 +51,6 @@ if mode == 'avgpool':
 	k = 4 # kernel size
 	s = 4 # stride
 	###########################
-
 	
 	# Ground truth image sample
 	image_gt_sample = os.listdir('dataset/VITON_test/ground_truth/')[0]
@@ -153,6 +159,19 @@ class dressUpInference():
         self.gen_model.cuda() 
         load_checkpoint(self.gen_model, opt.gen_checkpoint)
         load_checkpoint(self.warp_model, opt.warp_checkpoint)
+
+        # Pruning
+        """Global Unstructured Pruning"""
+        sparsity_level = 0.33
+        print(self.warp_model.image_features.encoders)
+        print(self.warp_model.image_features.encoders[0][0].block[2]) # conv2 layer; 4 modules inside encoders
+        # print(self.warp_model.cond_features)
+        # print(self.warp_model.image_FPN)
+        # print(self.warp_model.cond_FPN)
+        # print(self.warp_model.aflow_net)
+        layers2prune = [(self.warp_model.image_features.encoders[0][0].block[2], 'weight')]
+        global_unstructured_pruning(layers2prune, sparsity_level=sparsity_level)
+        Sparsity(layers=layers2prune).each_layer()
 
     def size_on_disk(self, model):
         '''
