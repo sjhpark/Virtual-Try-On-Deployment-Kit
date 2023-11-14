@@ -36,11 +36,19 @@ def check_buffers(model):
     print(f"Number of buffers in {model.__class__.__name__}: {len(list(model.named_buffers()))}")
     print(f"Buffers in {model.__class__.__name__}:\n{list(model.named_buffers())}")
 
-def sparse_representation(model):
+# def sparse_representation(model):
+#     """Convert a pruned model to a sparse model by removing reparametrization (mask buffers).
+#     Currently, this function only works for weights of Conv2d layers."""
+#     # Remove reparameterization (mask buffers)
+#     layers = get_layers(model=model)
+#     for layer in layers:
+#         if isinstance(layer, nn.Conv2d):
+#             prune.remove(layer, 'weight')
+
+def sparse_representation(model, layers):
     """Convert a pruned model to a sparse model by removing reparametrization (mask buffers).
     Currently, this function only works for weights of Conv2d layers."""
     # Remove reparameterization (mask buffers)
-    layers = get_layers(model=model)
     for layer in layers:
         if isinstance(layer, nn.Conv2d):
             prune.remove(layer, 'weight')
@@ -74,12 +82,15 @@ def global_unstructured_pruning(layers2prune, sparsity_level=0.33):
     """Global Unstructured Pruning"""
     prune.global_unstructured(layers2prune, pruning_method=prune.L1Unstructured, amount=sparsity_level)
 
-def size_on_disk(model, fname=None):
+def size_on_disk(model):
     dir = 'out'
     if not os.path.exists(dir):
         os.makedirs(dir)
     if isinstance(model, dict): # if model is a state dict
-        print(f'Model Size on Disk: {os.path.getsize(os.path.join(dir,fname))/1e6} MB')
+        torch.save(model, f"{dir}/temp.p")
+        size = os.path.getsize(f"{dir}/temp.p")
+        print(f"Model Size on Disk: {size/1e6} MB")
+        os.remove(f"{dir}/temp.p")
     elif isinstance(model, nn.Module): # if model is a nn.Module
         torch.save(model.state_dict(), f"{dir}/temp.p")
         size = os.path.getsize(f"{dir}/temp.p")

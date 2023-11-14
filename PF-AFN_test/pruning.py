@@ -163,7 +163,6 @@ class dressUpInference():
         # Pruning
         """Global Unstructured Pruning"""
         sparsity_level = 0.33
-        print(self.warp_model.image_features.encoders[0][0].block[2]) # conv2 layer; 4 modules inside encoders
         # print(self.warp_model.cond_features)
         # print(self.warp_model.image_FPN)
         # print(self.warp_model.cond_FPN)
@@ -205,9 +204,16 @@ class dressUpInference():
         layers2prune = [item for sublist in layers2prune for item in sublist]
 
         global_unstructured_pruning(layers2prune, sparsity_level=sparsity_level)
+        
+        layers = [layer for layer, _ in layers2prune]
+        sd = sparse_representation(self.warp_model, layers)
+        size_on_disk(sd)
+
         for layer in layers2prune:
-            print("layerrrrrr", layer)
             Sparsity(layer).each_layer()
+
+        self.warp_model = AFWM(opt, 3).eval().cuda()
+        self.warp_model.load_state_dict({k:(v if v.layout == torch.strided else v.to_dense()) for k,v in sd.items()})
 
     def size_on_disk(self, model):
         '''
