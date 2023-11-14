@@ -62,8 +62,8 @@ class Sparsity():
         self.layers = layers
     
     def each_layer(self):
-        for layer_and_name in self.layers: # layer_ane_name is a tuple. Ex) (nn.Conv2d, 'weight') or (nn.Conv2d, 'bias')
-            layer = layer_and_name[0]
+        for layer_and_name in self.layers: # layer_and_name is a tuple. Ex) (nn.Conv2d, 'weight') or (nn.Conv2d, 'bias')
+            layer = layer_and_name
             # if Conv2d layer
             if isinstance(layer, nn.Conv2d):
                 sparisty = torch.sum(layer.weight == 0)

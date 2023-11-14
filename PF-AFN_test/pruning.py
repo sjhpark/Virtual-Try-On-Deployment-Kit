@@ -163,15 +163,51 @@ class dressUpInference():
         # Pruning
         """Global Unstructured Pruning"""
         sparsity_level = 0.33
-        print(self.warp_model.image_features.encoders)
         print(self.warp_model.image_features.encoders[0][0].block[2]) # conv2 layer; 4 modules inside encoders
         # print(self.warp_model.cond_features)
         # print(self.warp_model.image_FPN)
         # print(self.warp_model.cond_FPN)
         # print(self.warp_model.aflow_net)
-        layers2prune = [(self.warp_model.image_features.encoders[0][0].block[2], 'weight')]
+        layers2prune = [
+                        # self.warp_model.image_features.encoders.Sequential0.Downsample.block
+                        [(block, 'weight') for block in self.warp_model.image_features.encoders[0][0].block.modules() if isinstance(block, nn.Conv2d)],
+                        # self.warp_model.image_features.encoders.Sequential0.Resblock1.block
+                        [(block, 'weight') for block in self.warp_model.image_features.encoders[0][1].block.modules() if isinstance(block, nn.Conv2d)],
+                        # self.warp_model.image_features.encoders.Sequential0.ResBlock2.block
+                        [(block, 'weight') for block in self.warp_model.image_features.encoders[0][2].block.modules() if isinstance(block, nn.Conv2d)],
+                        # self.warp_model.image_features.encoders.Sequential1.Downsample.block
+                        [(block, 'weight') for block in self.warp_model.image_features.encoders[1][0].block.modules() if isinstance(block, nn.Conv2d)],
+                        # self.warp_model.image_features.encoders.Sequential1.Resblock1.block
+                        [(block, 'weight') for block in self.warp_model.image_features.encoders[1][1].block.modules() if isinstance(block, nn.Conv2d)],
+                        # self.warp_model.image_features.encoders.Sequential1.ResBlock2.block
+                        [(block, 'weight') for block in self.warp_model.image_features.encoders[1][2].block.modules() if isinstance(block, nn.Conv2d)],
+                        # self.warp_model.image_features.encoders.Sequential2.Downsample.block
+                        [(block, 'weight') for block in self.warp_model.image_features.encoders[2][0].block.modules() if isinstance(block, nn.Conv2d)],
+                        # self.warp_model.image_features.encoders.Sequential2.Resblock1.block
+                        [(block, 'weight') for block in self.warp_model.image_features.encoders[2][1].block.modules() if isinstance(block, nn.Conv2d)],
+                        # self.warp_model.image_features.encoders.Sequential2.ResBlock2.block
+                        [(block, 'weight') for block in self.warp_model.image_features.encoders[2][2].block.modules() if isinstance(block, nn.Conv2d)],
+                        # self.warp_model.image_features.encoders.Sequential3.Downsample.block
+                        [(block, 'weight') for block in self.warp_model.image_features.encoders[3][0].block.modules() if isinstance(block, nn.Conv2d)],
+                        # self.warp_model.image_features.encoders.Sequential3.Resblock1.block
+                        [(block, 'weight') for block in self.warp_model.image_features.encoders[3][1].block.modules() if isinstance(block, nn.Conv2d)],
+                        # self.warp_model.image_features.encoders.Sequential3.ResBlock2.block
+                        [(block, 'weight') for block in self.warp_model.image_features.encoders[3][2].block.modules() if isinstance(block, nn.Conv2d)],
+                        # self.warp_model.image_features.encoders.Sequential4.Downsample.block
+                        [(block, 'weight') for block in self.warp_model.image_features.encoders[4][0].block.modules() if isinstance(block, nn.Conv2d)],
+                        # self.warp_model.image_features.encoders.Sequential4.Resblock1.block
+                        [(block, 'weight') for block in self.warp_model.image_features.encoders[4][1].block.modules() if isinstance(block, nn.Conv2d)],
+                        # self.warp_model.image_features.encoders.Sequential4.ResBlock2.block
+                        [(block, 'weight') for block in self.warp_model.image_features.encoders[4][2].block.modules() if isinstance(block, nn.Conv2d)],
+                        ]
+        
+        # make a single list of all layers to prune
+        layers2prune = [item for sublist in layers2prune for item in sublist]
+
         global_unstructured_pruning(layers2prune, sparsity_level=sparsity_level)
-        Sparsity(layers=layers2prune).each_layer()
+        for layer in layers2prune:
+            print("layerrrrrr", layer)
+            Sparsity(layer).each_layer()
 
     def size_on_disk(self, model):
         '''
