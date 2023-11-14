@@ -202,15 +202,16 @@ class dressUpInference():
         
         # make a single list of all layers to prune
         layers2prune = [item for sublist in layers2prune for item in sublist]
+        print(layers2prune)
 
         global_unstructured_pruning(layers2prune, sparsity_level=sparsity_level)
         
+        for layer in layers2prune:
+            Sparsity(layer).each_layer()
+
         layers = [layer for layer, _ in layers2prune]
         sd = sparse_representation(self.warp_model, layers)
         size_on_disk(sd)
-
-        for layer in layers2prune:
-            Sparsity(layer).each_layer()
 
         self.warp_model = AFWM(opt, 3).eval().cuda()
         self.warp_model.load_state_dict({k:(v if v.layout == torch.strided else v.to_dense()) for k,v in sd.items()})
@@ -362,7 +363,7 @@ class dressUpInference():
         print(f'{self.gen_model.__class__.__name__} per-Image Inference Time: {inference_time/batch_size} seconds')
 
 if __name__ == '__main__':
-	obj = dressUpInference()
-	obj.model_statistics() # param count & FLOPs count
-	obj.measure_inference_time(warmup_itr=10) # measure inference time
-	obj.get_statistics(img_num=5) # generate one image and compute accuracy (MSE, SSIM); img_num = either 1, 2, 3, 4, 5 (total 5 groundtruth images)
+    obj = dressUpInference()
+    obj.get_statistics(img_num=5) # generate one image and compute accuracy (MSE, SSIM); img_num = either 1, 2, 3, 4, 5 (total 5 groundtruth images)
+    obj.model_statistics() # param count & FLOPs count
+    obj.measure_inference_time(warmup_itr=10) # measure inference time
