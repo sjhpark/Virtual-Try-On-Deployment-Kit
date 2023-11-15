@@ -224,22 +224,20 @@ class dressUpInference():
         size_on_disk(self.warp_model)
 
     def model_statistics(self):
-        warp_params = 0
-        for k in self.warp_model.parameters():
-            warp_params+=k.numel()
-        gen_params = 0
-        for k in self.gen_model.parameters():
-            gen_params+=k.numel()
+        # Parameter Count
+        warp_params = param_count(self.warp_model)
+        gen_params = param_count(self.gen_model)
         print(f'Warp Model Params: {warp_params}')
         print(f'Generator Model Params: {gen_params}')
         print(f'Total Model Params: {warp_params+gen_params}')
-        warp_flops, warp_params = flopth(self.warp_model, in_size=((3, H, W),(3, H, W),))
-        gen_flops, gen_params = flopth(self.gen_model, in_size=((7, H, W),))
-        print(f'Warp Params - Library: {warp_params}')
-        print(f'Gen Params - Library: {gen_params}')
+
+        # FLOPS
+        warp_flops, w = flopth(self.warp_model, in_size=((3, H, W),(3, H, W),))
+        gen_flops, _ = flopth(self.gen_model, in_size=((7, H, W),))
         print(f'Warp FLOPS - Library: {warp_flops}')
         print(f'GEN FLOPS - Library: {gen_flops}')
 
+        # Model Size on Disk
         size_on_disk(self.warp_model)
         size_on_disk(self.gen_model)
 

@@ -36,15 +36,6 @@ def check_buffers(model):
     print(f"Number of buffers in {model.__class__.__name__}: {len(list(model.named_buffers()))}")
     print(f"Buffers in {model.__class__.__name__}:\n{list(model.named_buffers())}")
 
-# def sparse_representation(model):
-#     """Convert a pruned model to a sparse model by removing reparametrization (mask buffers).
-#     Currently, this function only works for weights of Conv2d layers."""
-#     # Remove reparameterization (mask buffers)
-#     layers = get_layers(model=model)
-#     for layer in layers:
-#         if isinstance(layer, nn.Conv2d):
-#             prune.remove(layer, 'weight')
-
 def sparse_representation(model, layers):
     """Convert a pruned model to a sparse model by removing reparametrization (mask buffers).
     Currently, this function only works for weights of Conv2d layers."""
@@ -135,11 +126,14 @@ def param_count(model):
     param_dict = {}
     param_count = 0
     for name, param in model.named_parameters():
-        param_dict[name] = param.numel()
-        param_count += param.numel()
+        zeros = torch.sum(param == 0) # number of zero-mask (usually for pruning) in each weight tensor
+        count = param.numel() - zeros
+        param_dict[name] = count
+        param_count += count
     print(f"Total Parmeter Count in {model.__class__.__name__}: {param_count}")
     for key, value in sorted(param_dict.items(), key=lambda item: item[1]):
         print(f"\t{key}:\t{value}")
+    return param_count
 
 def save_model_weights(model, fname):
     if not os.path.exists("out"):
