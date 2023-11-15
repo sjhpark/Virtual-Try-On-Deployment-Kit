@@ -147,9 +147,6 @@ class AFlowNet(nn.Module):
             x_cond = x_conds[len(x_warps) - 1 - i]
 
             if last_flow is not None and warp_feature:
-                ## convert last_flow to dtype of x_warp ##
-                last_flow = last_flow.type(x_warp.dtype)
-                ##########################################
                 x_warp_after = F.grid_sample(x_warp, last_flow.detach().permute(0, 2, 3, 1), mode='bilinear', padding_mode='border')
             else:
                 x_warp_after = x_warp
@@ -159,24 +156,15 @@ class AFlowNet(nn.Module):
             flow = apply_offset(flow)
 
             if last_flow is not None:
-                ## convert flow to dtype of last_flow ##
-                flow = flow.type(last_flow.dtype)
-                ##########################################
                 flow = F.grid_sample(last_flow, flow, mode='bilinear', padding_mode='border')
             else:
                 flow = flow.permute(0, 3, 1, 2)
 
             last_flow = flow
-            ## convert flow to dtype of x_warp ##
-            flow = flow.type(x_warp.dtype)
-            #####################################
             x_warp = F.grid_sample(x_warp, flow.permute(0, 2, 3, 1),mode='bilinear', padding_mode='border')
             concat = torch.cat([x_warp,x_cond],1)
             flow = self.netRefine[i](concat)
             flow = apply_offset(flow)
-            ## convert last_flow to dtype of flow ##
-            last_flow = last_flow.type(flow.dtype)
-            ########################################
             flow = F.grid_sample(last_flow, flow, mode='bilinear', padding_mode='border')
 
             last_flow = F.interpolate(flow, scale_factor=2, mode='bilinear')
