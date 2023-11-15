@@ -56,8 +56,6 @@ def sparse_representation(model, layers):
     # Convert parameters to sparse representation
     sd = model.state_dict() # state dict
     for item in sd:
-        if 'weight' in item:
-            print("sparsifying", item)
         sd[item] = model.state_dict()[item].to_sparse()
     return sd
 

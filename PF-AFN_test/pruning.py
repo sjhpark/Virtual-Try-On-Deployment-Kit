@@ -200,34 +200,28 @@ class dressUpInference():
                         [(block, 'weight') for block in self.warp_model.image_features.encoders[4][2].block.modules() if isinstance(block, nn.Conv2d)],
                         ]
         
-        # make a single list of all layers to prune
         layers2prune = [item for sublist in layers2prune for item in sublist]
-        print(layers2prune)
+
+        print("============Model Size on Disk Before pruning===============1")
+        size_on_disk(self.warp_model)
 
         global_unstructured_pruning(layers2prune, sparsity_level=sparsity_level)
         
         for layer in layers2prune:
             Sparsity(layer).each_layer()
 
+        print("============Model Size on Disk After pruning===============1")
+        size_on_disk(self.warp_model)
+
         layers = [layer for layer, _ in layers2prune]
         sd = sparse_representation(self.warp_model, layers)
+        print("============Model Size on Disk After pruning and Sparse Representation===============1")
         size_on_disk(sd)
 
         self.warp_model = AFWM(opt, 3).eval().cuda()
         self.warp_model.load_state_dict({k:(v if v.layout == torch.strided else v.to_dense()) for k,v in sd.items()})
-
-    def size_on_disk(self, model):
-        '''
-        Reference: https://pytorch.org/tutorials/recipes/recipes/dynamic_quantization.html
-        '''
-        dir = 'out'
-        if not os.path.exists(dir):
-            os.makedirs(dir)
-        torch.save(model.state_dict(), f"{dir}/temp.p")
-        size = os.path.getsize(f"{dir}/temp.p")
-        print(f"{model.__class__.__name__} Size on Disk: {size/1e6} MB")
-        os.remove(f"{dir}/temp.p")
-        return size
+        print("============Model Size on Disk After Loading with Corresponding State Dict Keys===============2")
+        size_on_disk(self.warp_model)
 
     def model_statistics(self):
         warp_params = 0
@@ -246,8 +240,8 @@ class dressUpInference():
         print(f'Warp FLOPS - Library: {warp_flops}')
         print(f'GEN FLOPS - Library: {gen_flops}')
 
-        self.size_on_disk(self.warp_model)
-        self.size_on_disk(self.gen_model)
+        size_on_disk(self.warp_model)
+        size_on_disk(self.gen_model)
 
     def infer(self, data):
         real_image = data['image']
@@ -319,18 +313,6 @@ class dressUpInference():
             print(f"Generated images are saved in {dataset_path+'results/'}")
 
     def measure_inference_time(self, warmup_itr=10):
-        self.opt = TestOptions().parse()
-        opt = TestOptions().parse()
-        self.warp_model = AFWM(opt, 3)
-        self.warp_model.eval()
-        self.warp_model.cuda()
-        self.gen_model = ResUnetGenerator(7, 4, 5, ngf=64, norm_layer=nn.BatchNorm2d)
-        # self.gen_model = ResUnetGenerator(7, 4, 5, ngf=128, norm_layer=nn.BatchNorm2d)
-        self.gen_model.eval()
-        self.gen_model.cuda() 
-        load_checkpoint(self.gen_model, opt.gen_checkpoint)
-        load_checkpoint(self.warp_model, opt.warp_checkpoint)
-
         dataset = CustomDataset(mode=mode)
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
         
@@ -364,6 +346,6 @@ class dressUpInference():
 
 if __name__ == '__main__':
     obj = dressUpInference()
-    obj.get_statistics(img_num=5) # generate one image and compute accuracy (MSE, SSIM); img_num = either 1, 2, 3, 4, 5 (total 5 groundtruth images)
     obj.model_statistics() # param count & FLOPs count
     obj.measure_inference_time(warmup_itr=10) # measure inference time
+    obj.get_statistics(img_num=5) # generate one image and compute accuracy (MSE, SSIM); img_num = either 1, 2, 3, 4, 5 (total 5 groundtruth images)
