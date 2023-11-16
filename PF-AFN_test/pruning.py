@@ -145,8 +145,7 @@ class CustomDataset(Dataset):
 			return real_image, clothes, edge
 
 class dressUpInference():
-    def __init__(self):
-        opt = TestOptions().parse()
+    def __init__(self, opt):
         self.warp_model = AFWM(opt, 3)
         self.warp_model.eval()
         self.warp_model.cuda()
@@ -315,7 +314,9 @@ class dressUpInference():
         print(f'{self.gen_model.__class__.__name__} per-Image Inference Time: {inference_time/batch_size} seconds')
 
 if __name__ == '__main__':
-    obj = dressUpInference()
+    opt = TestOptions().parse()
+
+    obj = dressUpInference(opt)
     obj.model_statistics() # param count & FLOPs count
     obj.measure_inference_time(warmup_itr=10) # measure inference time
     obj.get_statistics(img_num=5) # generate one image and compute accuracy (MSE, SSIM); img_num = either 1, 2, 3, 4, 5 (total 5 groundtruth images)
