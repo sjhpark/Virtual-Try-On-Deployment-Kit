@@ -159,6 +159,7 @@ class dressUpInference():
 
         # Pruning
         module = opt.module
+        sparsity_level = opt.sparsity
         """Global Unstructured Pruning"""
         sparsity_level = 0.33
         module_list = {"AFWM_image_feature_encoder": self.warp_model.image_features.encoders,
