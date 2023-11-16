@@ -131,8 +131,8 @@ def param_count(model):
         param_dict[name] = count
         param_count += count
     print(f"Total Parmeter Count in {model.__class__.__name__}: {param_count}")
-    for key, value in sorted(param_dict.items(), key=lambda item: item[1]):
-        print(f"\t{key}:\t{value}")
+    # for key, value in sorted(param_dict.items(), key=lambda item: item[1]):
+    #     print(f"\t{key}:\t{value}")
     return param_count
 
 def save_model_weights(model, fname):

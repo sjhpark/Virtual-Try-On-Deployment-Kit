@@ -158,10 +158,11 @@ class dressUpInference():
         load_checkpoint(self.warp_model, opt.warp_checkpoint)
 
         # Pruning
+        """Pruning Parameters"""
         module = opt.module
         sparsity_level = opt.sparsity
+
         """Global Unstructured Pruning"""
-        sparsity_level = 0.33
         module_list = {"AFWM_image_feature_encoder": self.warp_model.image_features.encoders,
                         "AFWM_cond_feature_encoder": self.warp_model.cond_features.encoders,
                         "AFWM_image_FPN": self.warp_model.image_FPN,
