@@ -159,24 +159,25 @@ class dressUpInference():
 
         # Pruning
         """Pruning Parameters"""
-        module = opt.module
+        module_name = opt.module
         sparsity_level = opt.sparsity
 
-        """Global Unstructured Pruning"""
+        """Layers to prune"""
         module_list = {"AFWM_image_feature_encoder": self.warp_model.image_features.encoders,
                         "AFWM_cond_feature_encoder": self.warp_model.cond_features.encoders,
                         "AFWM_image_FPN": self.warp_model.image_FPN,
                         "AFWM_cond_FPN": self.warp_model.cond_FPN,
                         "AFWM_aflow_net": self.warp_model.aflow_net
                         }
-        assert module in module_list.keys(), "Module to prune is not found"        
+        assert module_name in module_list.keys(), "Module to prune is not found"        
 
-        sub_module = module_list[module]
-        layers2prune = [(block, 'weight') for block in sub_module.modules() if isinstance(block, nn.Conv2d)]
+        module = module_list[module_name] # module to prune
+        layers2prune = [(block, 'weight') for block in module.modules() if isinstance(block, nn.Conv2d)]
 
         print("============Model Size on Disk Before pruning===============")
         size_on_disk(self.warp_model)
 
+        """Global Unstructured Pruning & Sparsity Check"""
         for layer in layers2prune:
             global_unstructured_pruning([layer], sparsity_level=sparsity_level)
             Sparsity(layer).each_layer()
