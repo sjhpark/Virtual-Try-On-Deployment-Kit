@@ -15,14 +15,12 @@ import torchvision.transforms as transforms
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import mean_squared_error
 from PIL import Image
-from fvcore.nn import FlopCountAnalysis
 from flopth import flopth
 import time
 from tqdm import tqdm
 from natsort import natsorted
 from torch.utils.data import Dataset, DataLoader
 
-import torch.nn.utils.prune as prune
 from indiv_utils import load_yaml, size_on_disk, get_layers, \
                         measure_inference_latency, param_count, \
                         save_model_weights, \
@@ -148,7 +146,6 @@ class CustomDataset(Dataset):
 
 class dressUpInference():
     def __init__(self):
-        self.opt = TestOptions().parse()
         opt = TestOptions().parse()
         self.warp_model = AFWM(opt, 3)
         self.warp_model.eval()
@@ -161,66 +158,38 @@ class dressUpInference():
         load_checkpoint(self.warp_model, opt.warp_checkpoint)
 
         # Pruning
+        module = opt.module
         """Global Unstructured Pruning"""
         sparsity_level = 0.33
-        # print(self.warp_model.cond_features)
-        # print(self.warp_model.image_FPN)
-        # print(self.warp_model.cond_FPN)
-        # print(self.warp_model.aflow_net)
-        layers2prune = [
-                        # self.warp_model.image_features.encoders.Sequential0.Downsample.block
-                        [(block, 'weight') for block in self.warp_model.image_features.encoders[0][0].block.modules() if isinstance(block, nn.Conv2d)],
-                        # self.warp_model.image_features.encoders.Sequential0.Resblock1.block
-                        [(block, 'weight') for block in self.warp_model.image_features.encoders[0][1].block.modules() if isinstance(block, nn.Conv2d)],
-                        # self.warp_model.image_features.encoders.Sequential0.ResBlock2.block
-                        [(block, 'weight') for block in self.warp_model.image_features.encoders[0][2].block.modules() if isinstance(block, nn.Conv2d)],
-                        # self.warp_model.image_features.encoders.Sequential1.Downsample.block
-                        [(block, 'weight') for block in self.warp_model.image_features.encoders[1][0].block.modules() if isinstance(block, nn.Conv2d)],
-                        # self.warp_model.image_features.encoders.Sequential1.Resblock1.block
-                        [(block, 'weight') for block in self.warp_model.image_features.encoders[1][1].block.modules() if isinstance(block, nn.Conv2d)],
-                        # self.warp_model.image_features.encoders.Sequential1.ResBlock2.block
-                        [(block, 'weight') for block in self.warp_model.image_features.encoders[1][2].block.modules() if isinstance(block, nn.Conv2d)],
-                        # self.warp_model.image_features.encoders.Sequential2.Downsample.block
-                        [(block, 'weight') for block in self.warp_model.image_features.encoders[2][0].block.modules() if isinstance(block, nn.Conv2d)],
-                        # self.warp_model.image_features.encoders.Sequential2.Resblock1.block
-                        [(block, 'weight') for block in self.warp_model.image_features.encoders[2][1].block.modules() if isinstance(block, nn.Conv2d)],
-                        # self.warp_model.image_features.encoders.Sequential2.ResBlock2.block
-                        [(block, 'weight') for block in self.warp_model.image_features.encoders[2][2].block.modules() if isinstance(block, nn.Conv2d)],
-                        # self.warp_model.image_features.encoders.Sequential3.Downsample.block
-                        [(block, 'weight') for block in self.warp_model.image_features.encoders[3][0].block.modules() if isinstance(block, nn.Conv2d)],
-                        # self.warp_model.image_features.encoders.Sequential3.Resblock1.block
-                        [(block, 'weight') for block in self.warp_model.image_features.encoders[3][1].block.modules() if isinstance(block, nn.Conv2d)],
-                        # self.warp_model.image_features.encoders.Sequential3.ResBlock2.block
-                        [(block, 'weight') for block in self.warp_model.image_features.encoders[3][2].block.modules() if isinstance(block, nn.Conv2d)],
-                        # self.warp_model.image_features.encoders.Sequential4.Downsample.block
-                        [(block, 'weight') for block in self.warp_model.image_features.encoders[4][0].block.modules() if isinstance(block, nn.Conv2d)],
-                        # self.warp_model.image_features.encoders.Sequential4.Resblock1.block
-                        [(block, 'weight') for block in self.warp_model.image_features.encoders[4][1].block.modules() if isinstance(block, nn.Conv2d)],
-                        # self.warp_model.image_features.encoders.Sequential4.ResBlock2.block
-                        [(block, 'weight') for block in self.warp_model.image_features.encoders[4][2].block.modules() if isinstance(block, nn.Conv2d)],
-                        ]
-        
-        layers2prune = [item for sublist in layers2prune for item in sublist]
+        module_list = {"AFWM_image_feature_encoder": self.warp_model.image_features.encoders,
+                        "AFWM_cond_feature_encoder": self.warp_model.cond_features.encoders,
+                        "AFWM_image_FPN": self.warp_model.image_FPN,
+                        "AFWM_cond_FPN": self.warp_model.cond_FPN,
+                        "AFWM_aflow_net": self.warp_model.aflow_net
+                        }
+        assert module in module_list.keys(), "Module to prune is not found"        
 
-        print("============Model Size on Disk Before pruning===============1")
+        sub_module = module_list[module]
+        layers2prune = [(block, 'weight') for block in sub_module.modules() if isinstance(block, nn.Conv2d)]
+
+        print("============Model Size on Disk Before pruning===============")
         size_on_disk(self.warp_model)
 
-        global_unstructured_pruning(layers2prune, sparsity_level=sparsity_level)
-        
         for layer in layers2prune:
+            global_unstructured_pruning([layer], sparsity_level=sparsity_level)
             Sparsity(layer).each_layer()
 
-        print("============Model Size on Disk After pruning===============1")
+        print("============Model Size on Disk After pruning===============")
         size_on_disk(self.warp_model)
 
         layers = [layer for layer, _ in layers2prune]
         sd = sparse_representation(self.warp_model, layers)
-        print("============Model Size on Disk After pruning and Sparse Representation===============1")
+        print("============Model Size on Disk After pruning and Sparse Representation===============")
         size_on_disk(sd)
 
         self.warp_model = AFWM(opt, 3).eval().cuda()
         self.warp_model.load_state_dict({k:(v if v.layout == torch.strided else v.to_dense()) for k,v in sd.items()})
-        print("============Model Size on Disk After Loading with Corresponding State Dict Keys===============2")
+        print("============Model Size on Disk After Loading with Corresponding State Dict Keys===============")
         size_on_disk(self.warp_model)
 
     def model_statistics(self):
