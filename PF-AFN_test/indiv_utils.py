@@ -85,6 +85,7 @@ def size_on_disk(model):
         size = os.path.getsize(f"{dir}/temp.p")
         print(f"Model Size on Disk: {size/1e6} MB")
         os.remove(f"{dir}/temp.p")
+    return size/1e6
 
 def measure_inference_latency(model, test_dataset, device, warmup_itr):
     config = load_yaml('config')
@@ -133,7 +134,7 @@ def param_count(model):
     print(f"Total Parmeter Count in {model.__class__.__name__}: {param_count}")
     # for key, value in sorted(param_dict.items(), key=lambda item: item[1]):
     #     print(f"\t{key}:\t{value}")
-    return param_count
+    return param_count.item()
 
 def save_model_weights(model, fname):
     if not os.path.exists("out"):
