@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import os
+import json
 import cv2
 import torch.nn.functional as F
 import  util.pytorch_ssim as pytorch_ssim
@@ -155,11 +156,17 @@ class dressUpInference():
         self.gen_model.cuda() 
         load_checkpoint(self.gen_model, opt.gen_checkpoint)
         load_checkpoint(self.warp_model, opt.warp_checkpoint)
+        
+        self.save_dir = "out"
+        self.json_file = os.path.join(self.save_dir, "pruning_results.json")
+        with open(self.json_file, 'w') as f:
+            f.write(json.dumps({}) + '\n')
 
         # Pruning
         """Pruning Parameters"""
-        module_name = opt.module
-        sparsity_level = opt.sparsity
+        module_name = opt.module # module to prune
+        sparsity_level = opt.sparsity # sparsity level
+        layer_idx = opt.layer_idx # index of the layer to prune
 
         """Layers to prune"""
         module_list = {"AFWM_image_feature_encoder": self.warp_model.image_features.encoders,
@@ -172,6 +179,9 @@ class dressUpInference():
 
         module = module_list[module_name] # module to prune
         layers2prune = [(block, 'weight') for block in module.modules() if isinstance(block, nn.Conv2d)]
+
+        if opt.layer_idx is not None:
+            layers2prune = layers2prune[layer_idx:layer_idx+1] # specific layer to prune
 
         print("============Model Size on Disk Before pruning===============")
         size_on_disk(self.warp_model)
@@ -202,15 +212,22 @@ class dressUpInference():
         print(f'Generator Model Params: {gen_params}')
         print(f'Total Model Params: {warp_params+gen_params}')
 
-        # FLOPS
-        warp_flops, w = flopth(self.warp_model, in_size=((3, H, W),(3, H, W),))
-        gen_flops, _ = flopth(self.gen_model, in_size=((7, H, W),))
-        print(f'Warp FLOPS - Library: {warp_flops}')
-        print(f'GEN FLOPS - Library: {gen_flops}')
+        # # FLOPS
+        # warp_flops, w = flopth(self.warp_model, in_size=((3, H, W),(3, H, W),))
+        # gen_flops, _ = flopth(self.gen_model, in_size=((7, H, W),))
+        # print(f'Warp FLOPS - Library: {warp_flops}')
+        # print(f'GEN FLOPS - Library: {gen_flops}')
 
         # Model Size on Disk
-        size_on_disk(self.warp_model)
-        size_on_disk(self.gen_model)
+        warp_disk_size = size_on_disk(self.warp_model)
+        gen_disk_size = size_on_disk(self.gen_model)
+
+        # Save parameter count and disk size to json
+        num_params = {'warp_params': warp_params, 'gen_params': gen_params}
+        disk_size = {'warp_disk_size': warp_disk_size, 'gen_disk_size': gen_disk_size}
+        with open(os.path.join(self.save_dir, 'pruning_results.json'), 'a') as f:
+            f.write(json.dumps(num_params) + '\n')
+            f.write(json.dumps(disk_size) + '\n')
 
     def infer(self, data):
         real_image = data['image']
@@ -280,6 +297,11 @@ class dressUpInference():
                     SSIM.append(ssim_score)
                     print(f"Image {i} | MSE: {mse_score}, SSIM: {ssim_score}")
             print(f"Generated images are saved in {dataset_path+'results/'}")
+        
+            # Save statistics to json
+            statistics = {'MSE': MSE, 'SSIM': SSIM}
+            with open(os.path.join(self.save_dir, 'pruning_results.json'), 'a') as f:
+                f.write(json.dumps(statistics) + '\n')
 
     def measure_inference_time(self, warmup_itr=10):
         dataset = CustomDataset(mode=mode)
@@ -301,6 +323,11 @@ class dressUpInference():
         inference_time = end_time - start_time
         print(f'{self.warp_model.__class__.__name__} per-Image Inference Time: {inference_time/batch_size} seconds')
 
+        # Save warp model inference time to json
+        inference_time = {'warp_inference': inference_time/batch_size}
+        with open(os.path.join(self.save_dir, 'pruning_results.json'), 'a') as f:
+            f.write(json.dumps(inference_time) + '\n')
+
         warped_cloth, last_flow, = flow_out
         warped_edge = F.grid_sample(edge, last_flow.permute(0, 2, 3, 1), mode='bilinear', padding_mode='zeros')
         gen_inputs = torch.cat([real_image, warped_cloth, warped_edge], 1)
@@ -313,10 +340,14 @@ class dressUpInference():
         inference_time = end_time - start_time
         print(f'{self.gen_model.__class__.__name__} per-Image Inference Time: {inference_time/batch_size} seconds')
 
+        # Save gen model inference time to json
+        inference_time = {'gen_inference': inference_time/batch_size}
+        with open(os.path.join(self.save_dir, 'pruning_results.json'), 'a') as f:
+            f.write(json.dumps(inference_time) + '\n')
+
 if __name__ == '__main__':
     opt = TestOptions().parse()
-
     obj = dressUpInference(opt)
-    obj.model_statistics() # param count & FLOPs count
+    obj.model_statistics() # param count & model size on disk
     obj.measure_inference_time(warmup_itr=10) # measure inference time
     obj.get_statistics(img_num=5) # generate one image and compute accuracy (MSE, SSIM); img_num = either 1, 2, 3, 4, 5 (total 5 groundtruth images)
