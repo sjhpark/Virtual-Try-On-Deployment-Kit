@@ -200,7 +200,7 @@ class dressUpInference():
         all_learnable_layers = []
         for module in module_list:
             all_learnable_layers += [(block, 'weight') for block in module.modules() if isinstance(block, nn.Conv2d) or isinstance(block, nn.BatchNorm2d)]
-        custom_filter_pruning(self.warp_model, all_learnable_layers, layer_idx=3, filter_idx=1)
+        custom_filter_pruning(self.warp_model, all_learnable_layers, layer_idx=7, filter_idx=40)
 
     def model_statistics(self):
         # Parameter Count
