@@ -36,13 +36,12 @@ def check_buffers(model):
     print(f"Number of buffers in {model.__class__.__name__}: {len(list(model.named_buffers()))}")
     print(f"Buffers in {model.__class__.__name__}:\n{list(model.named_buffers())}")
 
-def remove_mask(model, layers):
+def remove_masks(layer):
     """Convert a pruned model by PyTorch pruning library to a sparse model by removing reparametrization (mask buffers).
     Currently, this function only works for weights of Conv2d layers."""
     # Remove reparameterization (mask buffers)
-    for layer in layers:
-        if isinstance(layer, nn.Conv2d):
-            prune.remove(layer, 'weight')
+    if isinstance(layer, nn.Conv2d):
+        prune.remove(layer, 'weight')
 
 class Sparsity():
     """

@@ -23,8 +23,8 @@ from natsort import natsorted
 from torch.utils.data import Dataset, DataLoader
 
 from indiv_utils import size_on_disk, param_count, \
-                        sparse_representation, Sparsity, \
-                        global_unstructured_pruning, unstructured_pruning
+                        Sparsity, \
+                        global_unstructured_pruning, unstructured_pruning, remove_masks
 
 ssim_loss = pytorch_ssim.SSIM(window_size = 11)
 
@@ -188,6 +188,7 @@ class dressUpInference():
         for layer in layers2prune:
             # global_unstructured_pruning([layer], sparsity_level=sparsity_level)
             unstructured_pruning(layer, sparsity_level=sparsity_level)
+            remove_masks(layer)
             Sparsity(layer).each_layer()
 
         print("============Model Size on Disk After pruning & Without Removing Masks===============")
