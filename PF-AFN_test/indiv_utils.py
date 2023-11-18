@@ -31,14 +31,18 @@ def get_layers(model):
 
 def check_buffers(model):
     """Check buffers in a model.
-    After pruning the model, You will notice that the model size on disk is doubled after pruning.
-    This is because mask buffers are stored in addition to the original parameters."""
+    After unstructured-pruning the model, you will notice that the model size on disk is doubled after pruning.
+    This is because mask buffers (to replace weights with zeros) are stored in addition to the original parameters."""
     print(f"Number of buffers in {model.__class__.__name__}: {len(list(model.named_buffers()))}")
     print(f"Buffers in {model.__class__.__name__}:\n{list(model.named_buffers())}")
 
 def remove_masks(layer):
-    """Convert a pruned model by PyTorch pruning library to a sparse model by removing reparametrization (mask buffers).
-    Currently, this function only works for weights of Conv2d layers."""
+    """
+    Unstructured pruning creates mask buffers to replace weights with zeros. Thus, the model size on disk is doubled after unstructured pruning.
+    This function convert an unstructured-pruned model to a sparse model by removing reparametrization (mask buffers).
+    The model size on disk will be reduced to the original size.
+    Currently, this function only works for weights of Conv2d layers.
+    Reference for Unstructured Pruning: https://stackoverflow.com/questions/62326683/prunning-model-doesnt-improve-inference-speed-or-reduce-model-size"""
     # Remove reparameterization (mask buffers)
     if isinstance(layer, nn.Conv2d):
         prune.remove(layer, 'weight')
