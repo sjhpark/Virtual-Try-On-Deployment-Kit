@@ -201,7 +201,7 @@ class dressUpInference():
         elif job == "filter_pruning":
             layer_idx, filter_idx = opt.layer_idx, opt.filter_idx
             """Cutom Filter Pruning"""
-            module_list = [self.warp_model.image_features.encoders, self.warp_model.cond_features.encoders, self.warp_model.image_FPN, self.warp_model.cond_FPN]
+            module_list = [self.warp_model.cond_features.encoders, self.warp_model.image_features.encoders]
             all_learnable_layers = []
             for module in module_list:
                 all_learnable_layers += [(block, 'weight') for block in module.modules() if isinstance(block, nn.Conv2d) or isinstance(block, nn.BatchNorm2d)]
