@@ -22,11 +22,9 @@ from tqdm import tqdm
 from natsort import natsorted
 from torch.utils.data import Dataset, DataLoader
 
-from indiv_utils import load_yaml, size_on_disk, get_layers, \
-                        measure_inference_latency, param_count, \
-                        save_model_weights, \
-                        check_buffers, sparse_representation, Sparsity, \
-                        global_unstructured_pruning
+from indiv_utils import size_on_disk, param_count, \
+                        sparse_representation, Sparsity, \
+                        global_unstructured_pruning, unstructured_pruning
 
 ssim_loss = pytorch_ssim.SSIM(window_size = 11)
 
@@ -186,22 +184,13 @@ class dressUpInference():
         print("============Model Size on Disk Before pruning===============")
         size_on_disk(self.warp_model)
 
-        """Global Unstructured Pruning & Sparsity Check"""
+        """Unstructured Pruning & Sparsity Check"""
         for layer in layers2prune:
-            global_unstructured_pruning([layer], sparsity_level=sparsity_level)
+            # global_unstructured_pruning([layer], sparsity_level=sparsity_level)
+            unstructured_pruning(layer, sparsity_level=sparsity_level)
             Sparsity(layer).each_layer()
 
-        print("============Model Size on Disk After pruning===============")
-        size_on_disk(self.warp_model)
-
-        layers = [layer for layer, _ in layers2prune]
-        sd = sparse_representation(self.warp_model, layers)
-        print("============Model Size on Disk After pruning and Sparse Representation===============")
-        size_on_disk(sd)
-
-        self.warp_model = AFWM(opt, 3).eval().cuda()
-        self.warp_model.load_state_dict({k:(v if v.layout == torch.strided else v.to_dense()) for k,v in sd.items()})
-        print("============Model Size on Disk After Loading with Corresponding State Dict Keys===============")
+        print("============Model Size on Disk After pruning & Without Removing Masks===============")
         size_on_disk(self.warp_model)
 
     def model_statistics(self):
@@ -212,7 +201,7 @@ class dressUpInference():
         print(f'Generator Model Params: {gen_params}')
         print(f'Total Model Params: {warp_params+gen_params}')
 
-        # # FLOPS
+        # # FLOPs (Floating Point Operations)
         # warp_flops, w = flopth(self.warp_model, in_size=((3, H, W),(3, H, W),))
         # gen_flops, _ = flopth(self.gen_model, in_size=((7, H, W),))
         # print(f'Warp FLOPS - Library: {warp_flops}')

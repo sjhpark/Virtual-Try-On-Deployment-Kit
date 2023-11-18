@@ -36,19 +36,13 @@ def check_buffers(model):
     print(f"Number of buffers in {model.__class__.__name__}: {len(list(model.named_buffers()))}")
     print(f"Buffers in {model.__class__.__name__}:\n{list(model.named_buffers())}")
 
-def sparse_representation(model, layers):
-    """Convert a pruned model to a sparse model by removing reparametrization (mask buffers).
+def remove_mask(model, layers):
+    """Convert a pruned model by PyTorch pruning library to a sparse model by removing reparametrization (mask buffers).
     Currently, this function only works for weights of Conv2d layers."""
     # Remove reparameterization (mask buffers)
     for layer in layers:
         if isinstance(layer, nn.Conv2d):
             prune.remove(layer, 'weight')
-    
-    # Convert parameters to sparse representation
-    sd = model.state_dict() # state dict
-    for item in sd:
-        sd[item] = model.state_dict()[item].to_sparse()
-    return sd
 
 class Sparsity():
     """
@@ -70,6 +64,12 @@ class Sparsity():
 def global_unstructured_pruning(layers2prune, sparsity_level=0.33):
     """Global Unstructured Pruning"""
     prune.global_unstructured(layers2prune, pruning_method=prune.L1Unstructured, amount=sparsity_level)
+
+def unstructured_pruning(layer, sparsity_level=0.33):
+    """Unstructured Pruning"""
+    # layer[0]: layer itself, layer[1]: layer name such as 'weight' or 'bias'
+    if isinstance(layer[0], nn.Conv2d):
+        prune.l1_unstructured(layer[0], name='weight', amount=sparsity_level)
 
 def size_on_disk(model):
     dir = 'out'
