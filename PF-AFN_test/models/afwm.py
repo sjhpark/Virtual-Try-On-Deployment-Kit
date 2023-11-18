@@ -177,13 +177,13 @@ class AFWM(nn.Module):
 
     def __init__(self, opt, input_nc):
         super(AFWM, self).__init__()
-        num_filters = [64,128,256,256,256]
-        # num_filters = [128,128,128,128,128]
-        self.image_features = FeatureEncoder(3, num_filters) 
-        self.cond_features = FeatureEncoder(input_nc, num_filters)
-        self.image_FPN = RefinePyramid(num_filters)
-        self.cond_FPN = RefinePyramid(num_filters)
-        self.aflow_net = AFlowNet(len(num_filters))
+        self.num_filters = [64,128,256,256,256]
+        # self.num_filters = [128,128,128,128,128]
+        self.image_features = FeatureEncoder(3, self.num_filters) 
+        self.cond_features = FeatureEncoder(input_nc, self.num_filters)
+        self.image_FPN = RefinePyramid(self.num_filters)
+        self.cond_FPN = RefinePyramid(self.num_filters)
+        self.aflow_net = AFlowNet(len(self.num_filters))
 
     def forward(self, cond_input, image_input):
         cond_pyramids = self.cond_FPN(self.cond_features(cond_input)) # maybe use nn.Sequential

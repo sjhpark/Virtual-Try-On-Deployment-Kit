@@ -24,7 +24,8 @@ from torch.utils.data import Dataset, DataLoader
 
 from indiv_utils import size_on_disk, param_count, \
                         Sparsity, \
-                        global_unstructured_pruning, unstructured_pruning, remove_masks
+                        global_unstructured_pruning, unstructured_pruning, remove_masks, \
+                        custom_filter_pruning
 
 ssim_loss = pytorch_ssim.SSIM(window_size = 11)
 
@@ -181,18 +182,25 @@ class dressUpInference():
         if opt.layer_idx is not None:
             layers2prune = layers2prune[layer_idx:layer_idx+1] # specific layer to prune
 
-        print("============Model Size on Disk Before pruning===============")
-        size_on_disk(self.warp_model)
+        # print("============Model Size on Disk Before pruning===============")
+        # size_on_disk(self.warp_model)
 
-        """Unstructured Pruning & Sparsity Check"""
-        for layer in layers2prune:
-            # global_unstructured_pruning([layer], sparsity_level=sparsity_level)
-            unstructured_pruning(layer, sparsity_level=sparsity_level)
-            remove_masks(layer)
-            Sparsity(layer).each_layer()
+        # """Unstructured Pruning & Sparsity Check"""
+        # for layer in layers2prune:
+        #     # global_unstructured_pruning([layer], sparsity_level=sparsity_level)
+        #     unstructured_pruning(layer, sparsity_level=sparsity_level)
+        #     remove_masks(layer)
+        #     Sparsity(layer).each_layer()
 
-        print("============Model Size on Disk After pruning & Without Removing Masks===============")
-        size_on_disk(self.warp_model)
+        # print("============Model Size on Disk After pruning & Without Removing Masks===============")
+        # size_on_disk(self.warp_model)
+
+        """Cutom Filter Pruning"""
+        module_list = [self.warp_model.image_features.encoders, self.warp_model.cond_features.encoders, self.warp_model.image_FPN, self.warp_model.cond_FPN]
+        all_learnable_layers = []
+        for module in module_list:
+            all_learnable_layers += [(block, 'weight') for block in module.modules() if isinstance(block, nn.Conv2d) or isinstance(block, nn.BatchNorm2d)]
+        custom_filter_pruning(self.warp_model, all_learnable_layers, layer_idx=3, filter_idx=1)
 
     def model_statistics(self):
         # Parameter Count
