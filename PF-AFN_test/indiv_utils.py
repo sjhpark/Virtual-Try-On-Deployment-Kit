@@ -74,21 +74,17 @@ def unstructured_pruning(layer, sparsity_level=0.33):
     if isinstance(layer, nn.Conv2d):
         prune.l1_unstructured(layer, name='weight', amount=sparsity_level)
 
-def custom_filter_pruning(model, all_layers, layer_idx, filter_idx):
+def custom_filter_pruning(all_layers, layer_idx, filter_idx):
     """Remove a specific filter from a Conv2d layer"""
     # remove a specific filter from a Conv2d layer
     layer = all_layers[layer_idx] 
     layer = layer[0] # layer[0]: layer itself, layer[1]: layer name such as 'weight' or 'bias'
+
     assert isinstance(layer, nn.Conv2d), "layer must be a Conv2d layer"
     current_weight = layer.weight.data.clone() # shape (out_channels, in_channels, kernel_size[0], kernel_size[1])
+    assert filter_idx < current_weight.shape[0], "filter_idx must be smaller than the number of input filters in the conv layer"
     new_weight = torch.cat((current_weight[:filter_idx,:,:,:], current_weight[filter_idx+1:,:,:,:]), 0)
-    # new_weight = torch.cat((new_weight[:,:filter_idx,:,:], new_weight[:,filter_idx+1:,:,:]), 1)
     layer.weight.data = new_weight
-
-    # from models.afwm import RefinePyramid
-    # model.num_filters = [x-1 for x in model.num_filters]
-    # model.image_FPN = RefinePyramid(model.num_filters).cuda()
-    # model.cond_FPN = RefinePyramid(model.num_filters).cuda()
 
     if isinstance(all_layers[layer_idx + 1][0], nn.BatchNorm2d):
         next_bn_layer = all_layers[layer_idx + 1][0]
@@ -96,7 +92,7 @@ def custom_filter_pruning(model, all_layers, layer_idx, filter_idx):
         new_weight_bn = torch.cat((current_weight_bn[:filter_idx], current_weight_bn[filter_idx+1:]), 0)
         next_bn_layer.weight.data = new_weight_bn
 
-        # running_mean and running_var are not updated automatically
+        # update running_mean and running_var accordingly
         current_running_mean = next_bn_layer.running_mean.clone()
         new_running_mean = torch.cat((current_running_mean[:filter_idx], current_running_mean[filter_idx+1:]), 0)
         next_bn_layer.running_mean = new_running_mean
@@ -105,7 +101,7 @@ def custom_filter_pruning(model, all_layers, layer_idx, filter_idx):
         new_running_var = torch.cat((current_running_var[:filter_idx], current_running_var[filter_idx+1:]), 0)
         next_bn_layer.running_var = new_running_var
 
-        # bias
+        # update bias accordingly
         current_bias = next_bn_layer.bias.data.clone()
         new_bias = torch.cat((current_bias[:filter_idx], current_bias[filter_idx+1:]), 0)
         next_bn_layer.bias.data = nn.Parameter(new_bias)
@@ -115,46 +111,6 @@ def custom_filter_pruning(model, all_layers, layer_idx, filter_idx):
         current_weight_conv = next_conv_layer.weight.data.clone()
         new_weight_conv = torch.cat((current_weight_conv[:,:filter_idx,:,:], current_weight_conv[:,filter_idx+1:,:,:]), 1)
         next_conv_layer.weight.data = new_weight_conv
-
-    # # update all batchnorm2d and conv2d layers' input features/channels accordingly
-    # for idx in range(0, len(all_layers)):
-    #     if all_layers[idx][0].weight.shape[0] == 3:
-    #         continue
-    #     else:
-    #         if idx == layer_idx:
-    #             continue
-    #         else:
-    #             if isinstance(all_layers[idx][0], nn.BatchNorm2d):
-    #                 next_bn_layer = all_layers[idx][0]
-    #                 current_weight_bn = next_bn_layer.weight.data.clone()
-    #                 new_weight_bn = torch.cat((current_weight_bn[:filter_idx], current_weight_bn[filter_idx+1:]), 0)
-    #                 next_bn_layer.weight.data = new_weight_bn
-
-    #                 # running_mean and running_var are not updated automatically
-    #                 current_running_mean = next_bn_layer.running_mean.clone()
-    #                 new_running_mean = torch.cat((current_running_mean[:filter_idx], current_running_mean[filter_idx+1:]), 0)
-    #                 next_bn_layer.running_mean = new_running_mean
-    #                 current_running_var = next_bn_layer.running_var.clone()
-    #                 new_running_var = torch.cat((current_running_var[:filter_idx], current_running_var[filter_idx+1:]), 0)
-    #                 next_bn_layer.running_var = new_running_var
-    #                 # bias is not updated automatically
-    #                 current_bias = next_bn_layer.bias.clone()
-    #                 new_bias = torch.cat((current_bias[:filter_idx], current_bias[filter_idx+1:]), 0)
-    #                 next_bn_layer.bias = nn.Parameter(new_bias)
-
-    #             if isinstance(all_layers[idx][0], nn.Conv2d):
-    #                 # update conv2d layer's input features/channels
-    #                 next_conv2d_layer = all_layers[idx][0]
-    #                 current_weight_conv2d = next_conv2d_layer.weight.data.clone()
-    #                 if next_conv2d_layer.weight.shape[1] == 3:
-    #                     new_weight_conv2d = torch.cat((current_weight_conv2d[:filter_idx,:,:,:], current_weight_conv2d[filter_idx+1:,:,:,:]), 0)
-    #                 else:
-    #                     new_weight_conv2d = torch.cat((current_weight_conv2d[:filter_idx,:,:,:], current_weight_conv2d[filter_idx+1:,:,:,:]), 0)
-    #                     new_weight_conv2d = torch.cat((new_weight_conv2d[:,:filter_idx,:,:], new_weight_conv2d[:,filter_idx+1:,:,:]), 1)
-    #                 next_conv2d_layer.weight.data = new_weight_conv2d
-        
-    # for x in range(len(all_layers)):
-    #     print(all_layers[x][0].weight.shape)
 
 def size_on_disk(model):
     dir = 'out'

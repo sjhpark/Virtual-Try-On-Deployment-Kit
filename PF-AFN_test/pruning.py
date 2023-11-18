@@ -155,52 +155,57 @@ class dressUpInference():
         self.gen_model.cuda() 
         load_checkpoint(self.gen_model, opt.gen_checkpoint)
         load_checkpoint(self.warp_model, opt.warp_checkpoint)
+
+        job = opt.job
         
         self.save_dir = "out"
         self.json_file = os.path.join(self.save_dir, "pruning_results.json")
         with open(self.json_file, 'w') as f:
             f.write(json.dumps({}) + '\n')
 
-        # Pruning
-        """Pruning Parameters"""
-        module_name = opt.module # module to prune
-        sparsity_level = opt.sparsity # sparsity level
-        layer_idx = opt.layer_idx # index of the layer to prune
+        if job == "unstructured_pruning":
+            # Pruning
+            """Pruning Parameters"""
+            module_name = opt.module # module to prune
+            sparsity_level = opt.sparsity # sparsity level
+            layer_idx = opt.layer_idx # index of the layer to prune
 
-        """Layers to prune"""
-        module_list = {"AFWM_image_feature_encoder": self.warp_model.image_features.encoders,
-                        "AFWM_cond_feature_encoder": self.warp_model.cond_features.encoders,
-                        "AFWM_image_FPN": self.warp_model.image_FPN,
-                        "AFWM_cond_FPN": self.warp_model.cond_FPN,
-                        "AFWM_aflow_net": self.warp_model.aflow_net
-                        }
-        assert module_name in module_list.keys(), "Module to prune is not found"        
+            """Layers to prune"""
+            module_list = {"AFWM_image_feature_encoder": self.warp_model.image_features.encoders,
+                            "AFWM_cond_feature_encoder": self.warp_model.cond_features.encoders,
+                            "AFWM_image_FPN": self.warp_model.image_FPN,
+                            "AFWM_cond_FPN": self.warp_model.cond_FPN,
+                            "AFWM_aflow_net": self.warp_model.aflow_net
+                            }
+            assert module_name in module_list.keys(), "Module to prune is not found"        
 
-        module = module_list[module_name] # module to prune
-        layers2prune = [(block, 'weight') for block in module.modules() if isinstance(block, nn.Conv2d)]
+            module = module_list[module_name] # module to prune
+            layers2prune = [(block, 'weight') for block in module.modules() if isinstance(block, nn.Conv2d)]
 
-        if opt.layer_idx is not None:
-            layers2prune = layers2prune[layer_idx:layer_idx+1] # specific layer to prune
+            if opt.layer_idx is not None:
+                layers2prune = layers2prune[layer_idx:layer_idx+1] # specific layer to prune
 
-        # print("============Model Size on Disk Before pruning===============")
-        # size_on_disk(self.warp_model)
+            print("============Model Size on Disk Before pruning===============")
+            size_on_disk(self.warp_model)
 
-        # """Unstructured Pruning & Sparsity Check"""
-        # for layer in layers2prune:
-        #     # global_unstructured_pruning([layer], sparsity_level=sparsity_level)
-        #     unstructured_pruning(layer, sparsity_level=sparsity_level)
-        #     remove_masks(layer)
-        #     Sparsity(layer).each_layer()
+            """Unstructured Pruning & Sparsity Check"""
+            for layer in layers2prune:
+                # global_unstructured_pruning([layer], sparsity_level=sparsity_level)
+                unstructured_pruning(layer, sparsity_level=sparsity_level)
+                remove_masks(layer)
+                Sparsity(layer).each_layer()
 
-        # print("============Model Size on Disk After pruning & Without Removing Masks===============")
-        # size_on_disk(self.warp_model)
+            print("============Model Size on Disk After pruning & Without Removing Masks===============")
+            size_on_disk(self.warp_model)
 
-        """Cutom Filter Pruning"""
-        module_list = [self.warp_model.image_features.encoders, self.warp_model.cond_features.encoders, self.warp_model.image_FPN, self.warp_model.cond_FPN]
-        all_learnable_layers = []
-        for module in module_list:
-            all_learnable_layers += [(block, 'weight') for block in module.modules() if isinstance(block, nn.Conv2d) or isinstance(block, nn.BatchNorm2d)]
-        custom_filter_pruning(self.warp_model, all_learnable_layers, layer_idx=7, filter_idx=40)
+        elif job == "filter_pruning":
+            layer_idx, filter_idx = opt.layer_idx, opt.filter_idx
+            """Cutom Filter Pruning"""
+            module_list = [self.warp_model.image_features.encoders, self.warp_model.cond_features.encoders, self.warp_model.image_FPN, self.warp_model.cond_FPN]
+            all_learnable_layers = []
+            for module in module_list:
+                all_learnable_layers += [(block, 'weight') for block in module.modules() if isinstance(block, nn.Conv2d) or isinstance(block, nn.BatchNorm2d)]
+            custom_filter_pruning(all_learnable_layers, layer_idx=layer_idx, filter_idx=filter_idx)
 
     def model_statistics(self):
         # Parameter Count
