@@ -178,9 +178,23 @@ class AFWM(nn.Module):
     def __init__(self, opt, input_nc):
         super(AFWM, self).__init__()
         self.num_filters = [64,128,256,256,256]
-        # self.num_filters = [128,128,128,128,128]
         self.image_features = FeatureEncoder(3, self.num_filters) 
         self.cond_features = FeatureEncoder(input_nc, self.num_filters)
+        self.image_FPN = RefinePyramid(self.num_filters)
+        self.cond_FPN = RefinePyramid(self.num_filters)
+        self.aflow_net = AFlowNet(len(self.num_filters))
+        self.input_nc = input_nc
+    
+    def update_num_filters(self, new_num_filters):
+        """This function is to update new_num_filters and apply these to all layers after model is initialized.
+        Example: model = AFWM(input_nc=3)
+                 new_num_filters = [2,4,8,8,8]
+                 model.update_num_filters(new_num_filters)"""
+        self.num_filters = new_num_filters
+
+        # Update layers with new number of filters
+        self.image_features = FeatureEncoder(3, self.num_filters)
+        self.cond_features = FeatureEncoder(self.input_nc, self.num_filters)
         self.image_FPN = RefinePyramid(self.num_filters)
         self.cond_FPN = RefinePyramid(self.num_filters)
         self.aflow_net = AFlowNet(len(self.num_filters))
@@ -192,4 +206,4 @@ class AFWM(nn.Module):
         x_warp, last_flow  = self.aflow_net(image_input, image_pyramids, cond_pyramids)
 
         return x_warp, last_flow
-
+        
