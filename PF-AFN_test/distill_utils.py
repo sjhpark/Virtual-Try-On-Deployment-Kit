@@ -218,10 +218,12 @@ def test_output(warp_model, gen_model, opt):
 def run_inference(student_model_distilled:nn.Module, teacher_model:nn.Module, opt, warmup_iter=50):
     if opt.student == 'Gen':
         classmate_model = AFWM(opt, input_nc=3).cuda() # original Warp Model
+        load_checkpoint(classmate_model, opt.warp_checkpoint)
         dummy_input = [torch.rand(1, 7, 256, 192).cuda()]
         num_filters = opt.student_gen_ngf # ngf of distilled student model
     elif opt.student == 'Warp':
         classmate_model = ResUnetGenerator(7, 4, 5, ngf=64, norm_layer=nn.BatchNorm2d,  use_dropout=False).cuda() # original Gen Model
+        load_checkpoint(classmate_model, opt.gen_checkpoint)
         dummy_input = [torch.rand(1, 3, 256, 192).cuda(), torch.rand(1, 3, 256, 192).cuda()]
         num_filters = opt.student_warp_num_filters # num_filters of distilled student model
 
@@ -259,4 +261,3 @@ def run_inference(student_model_distilled:nn.Module, teacher_model:nn.Module, op
     rgb=cv2.cvtColor(rgb,cv2.COLOR_BGR2RGB)
     cv2.imwrite(os.path.join('results', f'distilled_{opt.student}_{num_filters}.jpg'), rgb)
     print(f'Output saved to results/distilled_{opt.student}_{num_filters}.jpg')
-    
