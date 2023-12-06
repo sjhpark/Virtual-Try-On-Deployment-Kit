@@ -1,7 +1,10 @@
 """Utils for distillation"""
 import numpy as np
-import time 
 import os, glob
+import subprocess
+import time 
+import csv
+from termcolor import colored, cprint
 from tqdm import tqdm
 import cv2
 import torch
@@ -14,6 +17,14 @@ from data.base_dataset import get_params, get_transform
 from PIL import Image
 from models.networks import ResUnetGenerator, load_checkpoint
 from models.afwm import AFWM
+
+def color_print(text, color:str='green', bold:bool=False, underline:bool=False):
+    attrs = []
+    if bold:
+        attrs.append('bold')
+    if underline:
+        attrs.append('underline')
+    cprint(text, color=color, attrs=attrs)
 
 class DistillationLoss(nn.Module):
     def __init__(self, feature_loss_weight=1.0, output_loss_weight=1.0):
@@ -171,7 +182,7 @@ def fine_tuning(dataloader, student:str, student_model:nn.Module, optimizer:opti
                 # Update weights
                 optimizer.step()
 
-        print(f'Distillation Loss: {total_loss}')
+        color_print(f'Distillation Loss: {total_loss}', color='yellow')
     return student_model
 
 def test_output(warp_model, gen_model, opt):
@@ -249,8 +260,8 @@ def run_inference(student_model_distilled:nn.Module, teacher_model:nn.Module, op
         time_container_student.append(elapsed)
     elapsed_student = sum(time_container_student)/len(time_container_student) # average inference time
 
-    print(f'Average Inference Time of {opt.student} Teacher Model: {elapsed_teacher:.4f} seconds')
-    print(f'Average Inference Time of Distilled {opt.student} Student Model: {elapsed_student:.4f} seconds')
+    color_print(f'Average Inference Time of {opt.student} Teacher Model: {elapsed_teacher:.4f} seconds', color='yellow')
+    color_print(f'Average Inference Time of Distilled {opt.student} Student Model: {elapsed_student:.4f} seconds', color='yellow')
 
     # Save output (warped image)
     if opt.student == 'Gen':
@@ -260,4 +271,65 @@ def run_inference(student_model_distilled:nn.Module, teacher_model:nn.Module, op
     rgb=(output*255).astype(np.uint8)
     rgb=cv2.cvtColor(rgb,cv2.COLOR_BGR2RGB)
     cv2.imwrite(os.path.join('results', f'distilled_{opt.student}_{num_filters}.jpg'), rgb)
-    print(f'Output saved to results/distilled_{opt.student}_{num_filters}.jpg')
+    color_print(f'Output saved to results/distilled_{opt.student}_{num_filters}.jpg', bold=True, underline=True)
+
+def count_params(model:nn.Module):
+    params = 0
+    for i in model.parameters():
+        params += i.numel()
+    return params
+
+def gpu_power_draw(student_model:nn.Module, opt, run_time=30, warmup_iter=50):
+    """Use Nvidia SMI to measure GPU power draw of a student model"""
+    
+    if opt.student == 'Gen':
+        classmate_model = AFWM(opt, input_nc=3).cuda() # original Warp Model
+        load_checkpoint(classmate_model, opt.warp_checkpoint)
+        dummy_input = [torch.rand(1, 7, 256, 192).cuda()]
+        num_filters = opt.student_gen_ngf # ngf of distilled student model
+    elif opt.student == 'Warp':
+        classmate_model = ResUnetGenerator(7, 4, 5, ngf=64, norm_layer=nn.BatchNorm2d,  use_dropout=False).cuda() # original Gen Model
+        load_checkpoint(classmate_model, opt.gen_checkpoint)
+        dummy_input = [torch.rand(1, 3, 256, 192).cuda(), torch.rand(1, 3, 256, 192).cuda()]
+        num_filters = opt.student_warp_num_filters # num_filters of distilled student model
+
+    # Warmup
+    for i in range(warmup_iter):
+        student_model.eval()(*dummy_input)
+    
+    # Start process
+    curr_time_unix = int(time.time())
+    filename = f"results/gpu_power_usage_{opt.student}_distilled_{curr_time_unix}.csv"
+    command = f"nvidia-smi --query-gpu=gpu_name,power.draw --format=csv -l 1 --filename={filename}"
+    process = subprocess.Popen(command, shell=True)
+    
+    # Run inference
+    time_container_student = []
+    time_track = 0
+    color_print(f"Running Inference for {run_time} seconds...", bold=True, underline=True)
+    while time_track < run_time:
+        start_time = time.time()
+        student_model.eval()(*dummy_input)
+        elapsed = time.time() - start_time
+        time_container_student.append(elapsed)
+        time_track += elapsed
+    
+    # Terminate the subprocess
+    subprocess.Popen("killall nvidia-smi", shell=True) # kill NVIDA SMI process
+    time.sleep(2) # wait for a few seconds to fully save the csv file
+
+    elapsed_student = sum(time_container_student) / len(time_container_student)
+    color_print(f"Average Inference Time of student {opt.student}: {elapsed_student:.4f} seconds", color='yellow')
+
+    # Read power draw from the saved csv file
+    power_draws = []
+    color_print(f"Reading Power Draw from {filename}...", bold=True, underline=True)
+    with open(filename, 'r', encoding='utf-8') as f:
+        reader = csv.reader(f)
+        next(reader) # skip header
+        for row in reader: # each row (e.g. ['NVIDIA GeForce GTX 1650 with Max-Q Design', ' 35.20 W'])
+            row = row[1].split() # ['35.20', 'W']
+            power_draw = float(row[0])
+            power_draws.append(power_draw)
+    average_power_draw = sum(power_draws) / len(power_draws)
+    color_print(f"Average Power Draw: {average_power_draw:.4f} W", color='yellow')
