@@ -132,8 +132,8 @@ class finetune_VITON_dataset(Dataset):
 
 def fine_tuning(dataloader, student:str, student_model:nn.Module, optimizer:optim.Optimizer, custom_loss:nn.Module, epochs=10):
     for i in tqdm(range(epochs), desc='Epochs'):
+        loss_epoch = []
         for edge, real_image, cloth, warped_cloth, last_flow, warped_edge, gen_inputs, gen_outputs, p_tryon in dataloader:
-        # for data, target, warped_edge, warped_cloth, img in dataloader:
             if student == 'Gen':
                 # Inputs & Outputs from teacher model
                 inputs = gen_inputs
@@ -149,9 +149,10 @@ def fine_tuning(dataloader, student:str, student_model:nn.Module, optimizer:opti
                 m_composite = m_composite * warped_edge
                 p_tryon_student = warped_cloth * m_composite + p_rendered * (1 - m_composite) # warped image using student model's outputs
                 # Compute loss
-                total_loss = custom_loss(student_outputs, teacher_outputs, p_tryon_student, p_tryon).float()
+                loss = custom_loss(student_outputs, teacher_outputs, p_tryon_student, p_tryon).float()
+                loss_epoch.append(loss.item())
                 # Backprop
-                total_loss.backward()
+                loss.backward()
                 # Update weights
                 optimizer.step()
 
@@ -174,16 +175,17 @@ def fine_tuning(dataloader, student:str, student_model:nn.Module, optimizer:opti
                 p_rendered = torch.tanh(p_rendered)
                 m_composite = torch.sigmoid(m_composite)
                 m_composite = m_composite * warped_edge
-                # print(torch.sum(m_composite))
+                print(torch.sum(m_composite)) # this is for monitoring warped edge (should not be 0)
                 p_tryon_student = warped_cloth_student * m_composite + p_rendered * (1 - m_composite) # warped image (person trying on clothe)
                 # Compute loss
-                total_loss = custom_loss(student_outputs, teacher_outputs, p_tryon_student, p_tryon).float()
+                loss = custom_loss(student_outputs, teacher_outputs, p_tryon_student, p_tryon).float()
+                loss_epoch.append(loss.item())
                 # Backprop
-                total_loss.backward()
+                loss.backward()
                 # Update weights
                 optimizer.step()
 
-        color_print(f'Distillation Loss: {total_loss}', color='yellow')
+        color_print(f'Average Distillation Loss at Epoch {i}: {np.mean(loss_epoch):.4f}', 'yellow')
     return student_model
 
 def test_output(warp_model, gen_model, opt):
