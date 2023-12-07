@@ -37,12 +37,12 @@ class DistillationLoss(nn.Module):
     def forward(self, student_outputs, teacher_outputs, student_p_tryon, teacher_p_tryon):
         assert len(student_outputs) == len(teacher_outputs), "Number of student and teacher outputs must be the same"
         if len(student_outputs) > 1:
-            feature_loss = 0
-            for student_output, teacher_output in zip(student_outputs, teacher_outputs):
-                feature_loss += self.feature_criterion(student_output, teacher_output)
-            feature_loss /= len(student_outputs)
+            warped_cloth, last_flow = teacher_outputs
+            warped_cloth_student, last_flow_student = student_outputs
+            feature_loss = 0.5*self.feature_criterion(warped_cloth_student, warped_cloth) + 0.5*self.feature_criterion(last_flow_student, last_flow)
         else:
             feature_loss = self.feature_criterion(student_outputs, teacher_outputs)
+        
         output_loss = self.output_criterion(student_p_tryon, teacher_p_tryon)
 
         total_loss = self.feature_loss_weight * feature_loss + self.output_loss_weight * output_loss
@@ -174,6 +174,7 @@ def fine_tuning(dataloader, student:str, student_model:nn.Module, optimizer:opti
                 p_rendered = torch.tanh(p_rendered)
                 m_composite = torch.sigmoid(m_composite)
                 m_composite = m_composite * warped_edge
+                # print(torch.sum(m_composite))
                 p_tryon_student = warped_cloth_student * m_composite + p_rendered * (1 - m_composite) # warped image (person trying on clothe)
                 # Compute loss
                 total_loss = custom_loss(student_outputs, teacher_outputs, p_tryon_student, p_tryon).float()
@@ -281,7 +282,7 @@ def count_params(model:nn.Module):
 
 def gpu_power_draw(student_model:nn.Module, opt, run_time=30, warmup_iter=50):
     """Use Nvidia SMI to measure GPU power draw of a student model"""
-    
+
     if opt.student == 'Gen':
         classmate_model = AFWM(opt, input_nc=3).cuda() # original Warp Model
         load_checkpoint(classmate_model, opt.warp_checkpoint)
@@ -300,7 +301,7 @@ def gpu_power_draw(student_model:nn.Module, opt, run_time=30, warmup_iter=50):
     # Start process
     curr_time_unix = int(time.time())
     filename = f"results/gpu_power_usage_{opt.student}_distilled_{curr_time_unix}.csv"
-    command = f"nvidia-smi --query-gpu=gpu_name,power.draw --format=csv -l 1 --filename={filename}"
+    command = f"nvidia-smi --query-gpu=gpu_name,power.draw --format=csv -l 1 --filename={filename}" # record GPU power draw per second
     process = subprocess.Popen(command, shell=True)
     
     # Run inference
