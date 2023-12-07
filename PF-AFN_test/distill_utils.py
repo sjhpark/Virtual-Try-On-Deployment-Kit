@@ -39,7 +39,7 @@ class DistillationLoss(nn.Module):
         if len(student_outputs) > 1:
             warped_cloth, last_flow = teacher_outputs
             warped_cloth_student, last_flow_student = student_outputs
-            feature_loss = 0.5*self.feature_criterion(warped_cloth_student, warped_cloth) + 0.5*self.feature_criterion(last_flow_student, last_flow)
+            feature_loss = 0.1*self.feature_criterion(warped_cloth_student, warped_cloth) + 0.9*self.feature_criterion(last_flow_student, last_flow)
         else:
             feature_loss = self.feature_criterion(student_outputs, teacher_outputs)
         
@@ -175,7 +175,7 @@ def fine_tuning(dataloader, student:str, student_model:nn.Module, optimizer:opti
                 p_rendered = torch.tanh(p_rendered)
                 m_composite = torch.sigmoid(m_composite)
                 m_composite = m_composite * warped_edge
-                print(torch.sum(m_composite)) # this is for monitoring warped edge (should not be 0)
+                # print(torch.sum(m_composite)) # this is for monitoring warped edge (should not be 0)
                 p_tryon_student = warped_cloth_student * m_composite + p_rendered * (1 - m_composite) # warped image (person trying on clothe)
                 # Compute loss
                 loss = custom_loss(student_outputs, teacher_outputs, p_tryon_student, p_tryon).float()
