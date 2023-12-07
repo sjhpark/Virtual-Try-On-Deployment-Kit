@@ -97,22 +97,13 @@ def teacher_outputs(teacher_warp_model, teacher_gen_model, opt, I_path, C_path, 
 
 class finetune_VITON_dataset(Dataset):
     def __init__(self, opt):
-        # self.opt = opt
-        # img_pattern = 'dataset/test_img/0*'
-        # cloth_pattern = 'dataset/test_clothes/0*'
-        # img_files = glob.glob(img_pattern)
-        # cloth_files = glob.glob(cloth_pattern)
-
-        # # Collect image, cloth, and edge paths
-        # self.data = []
-        # for i in img_files:
-        #     for j in cloth_files:
-        #         self.data.append((i, j, j.replace('test_clothes', 'test_edge')))
-
         self.opt = opt
-        img_pattern = 'VITON_traindata/train_img/0*'
-        cloth_pattern = 'VITON_traindata/train_cloth/0*'
-        edge_pattern = 'VITON_traindata/train_edge/0*'
+        # img_pattern = 'VITON_traindata/train_img/0*'
+        # cloth_pattern = 'VITON_traindata/train_cloth/0*'
+        # edge_pattern = 'VITON_traindata/train_edge/0*'
+        img_pattern = 'dataset/test_img/0*'
+        cloth_pattern = 'dataset/test_clothes/0*'
+        edge_pattern = 'dataset/test_edge/0*'
         img_files = glob.glob(img_pattern)
         cloth_files = glob.glob(cloth_pattern)
         edge_files = glob.glob(edge_pattern)
