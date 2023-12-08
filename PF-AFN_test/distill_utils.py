@@ -12,6 +12,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import Dataset
+from codecarbon import track_emissions, EmissionsTracker
 
 from data.base_dataset import get_params, get_transform
 from PIL import Image
@@ -135,8 +136,8 @@ class finetune_VITON_dataset(Dataset):
         # return gen_input, gen_output, warped_edge, warped_cloth, img
         return edge, real_image, cloth, warped_cloth, last_flow, warped_edge, gen_inputs, gen_outputs, p_tryon
 
-def fine_tuning(dataloader, student:str, student_model:nn.Module, optimizer:optim.Optimizer, custom_loss:nn.Module, epochs=10):
-    for i in tqdm(range(epochs), desc='Epochs'):
+def fine_tuning(dataloader, student:str, student_model:nn.Module, optimizer:optim.Optimizer, custom_loss:nn.Module, opt):
+    for i in tqdm(range(opt.epochs), desc='Epochs'):
         loss_epoch = []
         for edge, real_image, cloth, warped_cloth, last_flow, warped_edge, gen_inputs, gen_outputs, p_tryon in dataloader:
             if student == 'Gen':
@@ -191,6 +192,7 @@ def fine_tuning(dataloader, student:str, student_model:nn.Module, optimizer:opti
                 optimizer.step()
 
         color_print(f'Average Distillation Loss at Epoch {i}: {np.mean(loss_epoch):.4f}', 'yellow')
+
     return student_model
 
 def test_output(warp_model, gen_model, opt):
@@ -341,3 +343,22 @@ def gpu_power_draw(student_model:nn.Module, opt, run_time=30, warmup_iter=50):
             power_draws.append(power_draw)
     average_power_draw = sum(power_draws) / len(power_draws)
     color_print(f"Average Power Draw: {average_power_draw:.4f} W", color='yellow')
+
+def carbon_emissions(model, opt, run_time=30, warmup_iter=50):
+    if opt.student == 'Gen':
+        dummy_input = [torch.rand(1, 7, 256, 192)].cuda()
+    elif opt.student == 'Warp':
+        dummy_input = [torch.rand(1, 3, 256, 192).cuda(), torch.rand(1, 3, 256, 192).cuda()]
+    
+    # Warmup
+    for i in range(warmup_iter):
+        model.eval()(*dummy_input)
+
+    # Run inference
+    tracker = EmissionsTracker()
+    tracker.start()
+    time_track = time.time()
+    while time.time() - time_track < run_time:
+        model.eval()(*dummy_input)
+    emissions = tracker.stop()
+    print(f"Cumulative Carbon Emissions: {emissions:.4f} kgCO2e")
